@@ -12,15 +12,6 @@ async def test_frontend_hand_drawn_loads():
 
 
 @pytest.mark.asyncio
-async def test_frontend_industrial_loads():
-    """Verify that the Industrial Skeuomorphism frontend on port 5174 loads and renders correctly."""
-    async with httpx.AsyncClient(timeout=10.0) as client:
-        res = await client.get("http://localhost:5174")
-        assert res.status_code == 200
-        assert "<div id=\"root\">" in res.text
-
-
-@pytest.mark.asyncio
 async def test_prometheus_metrics_scrape():
     """Verify that the Prometheus metrics endpoint exposes metrics."""
     async with httpx.AsyncClient(timeout=10.0) as client:

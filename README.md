@@ -61,7 +61,7 @@ A student holding a **resume** and a **job description** usually cannot answer:
 - **Performance report** — overall 0–100 score, 7-axis competency rubric, strengths/weaknesses, per-question feedback (good / better / ideal direction).
 - **Preparation plan** — prioritized topics with reasons and action items.
 - **History** — every attempt logged with scores; Good (≥70%) / Needs Work filters, average tracking, resume-any-interview.
-- **Two complete themes** — hand-drawn paper UI (`frontend`, :5173) and industrial console UI (`frontend-industrial`, :5174).
+- **Hand-drawn paper UI** (`frontend`, :5173) — warm paper texture, wobbly cards, taped camera frame.
 
 ### Platform
 - **Pluggable AI providers** — `LLMProvider` / `STTProvider` / `TTSProvider` contracts with Gemini, faster-whisper, Piper, Ollama, and a zero-dependency `SmartIntelligenceEngine` fallback.
@@ -77,7 +77,6 @@ A student holding a **resume** and a **job description** usually cannot answer:
 flowchart TB
     subgraph Clients["Clients"]
         WEB1["Hand-drawn UI<br/>React + Vite · :5173"]
-        WEB2["Industrial UI<br/>React + Vite · :5174"]
     end
 
     subgraph Edge["Edge"]
@@ -109,7 +108,7 @@ flowchart TB
         CELERY["Celery worker<br/>background jobs"]
     end
 
-    WEB1 & WEB2 --> NGINX --> API
+    WEB1 --> NGINX --> API
     API --> AI
     API --> PG & REDIS & QDRANT & B2
     API --> CELERY
@@ -172,9 +171,8 @@ flowchart TB
 
 | Layer | Technology |
 |-------|-----------|
-| Frontend(s) | React 19, TypeScript, Vite 8, Tailwind CSS, lucide-react |
+| Frontend | React 19, TypeScript, Vite 8, Tailwind CSS, lucide-react |
 | Hand-drawn theme | Kalam + Patrick Hand fonts, wobbly radii, hard offset shadows, canvas `VoiceVisualizer`, `VideoCamera` |
-| Industrial theme | Mono console aesthetic, `OscilloscopeWave`, `IndustrialMonitor`, LED indicators |
 | Backend | FastAPI, Python 3.13, SQLAlchemy 2.x (async), asyncpg, Pydantic v2 + Settings |
 | Auth | JWT access + refresh (PyJWT, argon2/passlib) |
 | AI | Google Gemini 2.5 Flash (LLM, STT fallback, TTS), faster-whisper `tiny.en` (STT), Piper (TTS), Ollama adapter, SmartIntelligenceEngine fallback |
@@ -217,9 +215,6 @@ checkout/
 │   │   ├── components/ui/        # WobblyButton/Card, SpeechBubble,
 │   │   │                        # HandDrawnInput, StickyNote, ReadinessBadge
 │   │   └── lib/api.ts           # typed API client (VITE_API_URL aware)
-│   └── vercel.json
-├── frontend-industrial/         # console UI (:5174)
-│   ├── src/components/          # IndustrialMonitor, OscilloscopeWave, …
 │   └── vercel.json
 ├── nginx/nginx.conf
 ├── prometheus/prometheus.yml
@@ -287,9 +282,6 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 
 # Hand-drawn UI (terminal 2)
 cd frontend && npm install && npm run dev -- --host 0.0.0.0 --port 5173
-
-# Industrial UI (terminal 3)
-cd frontend-industrial && npm install && npm run dev -- --host 0.0.0.0 --port 5174
 ```
 
 > Frontend dev servers proxy nothing — the API base is `VITE_API_URL` (defaults to `http://localhost:8000/api/v1`).
@@ -347,14 +339,13 @@ Frontend (Vercel or `.env.local`):
 ```mermaid
 flowchart LR
     GH["GitHub repo"] --> V1["Vercel project<br/>root: frontend"]
-    GH --> V2["Vercel project<br/>root: frontend-industrial"]
     GH --> R["Render Web Service<br/>root: backend"]
-    V1 & V2 -->|"VITE_API_URL"| R
+    V1 -->|"VITE_API_URL"| R
 ```
 
 1. **Push**: `git add -A && git commit -m "chore(deploy)" && git push origin main`
 2. **Render** (backend): New Web Service → repo, Root `backend`, Build `pip install -r requirements.txt`, Start `uvicorn app.main:app --host 0.0.0.0 --port $PORT`. Add all §9 vars. Free tier sleeps + may OOM on Whisper — **Starter ($7/mo)** recommended. Verify `/docs`.
-3. **Vercel** (frontend): New Project → repo, Root `frontend`, Framework Vite, env `VITE_API_URL=https://<render-host>/api/v1`. Repeat for `frontend-industrial` as a second project.
+3. **Vercel** (frontend): New Project → repo, Root `frontend`, Framework Vite, env `VITE_API_URL=https://<render-host>/api/v1`.
 4. **CORS**: add the Vercel URL(s) to Render's `CORS_ORIGINS` (JSON array) → Manual Deploy.
 5. Notes: HTTPS everywhere (required for mic/camera); `VITE_*` bakes at build time — redeploy after changing it; first transcription post-deploy is slow (model download).
 
