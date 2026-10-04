@@ -1,0 +1,912 @@
+import { useState, useEffect, useRef } from "react";
+import confetti from "canvas-confetti";
+import {
+  Cpu,
+  Terminal,
+  Mic,
+  Activity,
+  Play,
+  RotateCcw,
+  Volume2,
+  VolumeX,
+  ArrowRight,
+  AlertOctagon
+} from "lucide-react";
+
+import {
+  api,
+  type Job,
+  type Resume,
+  type JobFitResult,
+  type QuestionData,
+  type AnswerEvaluation,
+  type ReportData,
+  type PreparationPlanData,
+} from "./lib/api";
+
+import { IndustrialButton } from "./components/ui/IndustrialButton";
+import { IndustrialCard } from "./components/ui/IndustrialCard";
+import { IndustrialInput, IndustrialTextarea } from "./components/ui/IndustrialInput";
+import { LedIndicator } from "./components/ui/LedIndicator";
+import { OscilloscopeWave } from "./components/interview/OscilloscopeWave";
+import { IndustrialMonitor } from "./components/interview/IndustrialMonitor";
+
+const SAMPLE_JD = `Role: AI Engineer Intern / Associate Backend Engineer
+Company: Student Credibility
+Location: Remote / Hybrid
+
+We are looking for an AI Engineer Intern to build next-generation career acceleration tools.
+Key Responsibilities:
+- Design high-performance asynchronous REST and WebSocket APIs using Python and FastAPI.
+- Build and evaluate RAG pipelines using vector search and large language models.
+- Implement intelligent prompt engineering and robust Pydantic schemas.
+- Optimize low-latency caching layers using Redis and databases with PostgreSQL.
+
+Required Skills:
+- Python (FastAPI, AsyncIO, Pydantic)
+- Machine Learning / AI fundamentals
+- Large Language Models (LLMs) & RAG Architectures
+- REST APIs & Microservices
+- PostgreSQL & Relational DBs
+
+Preferred:
+- Redis & In-Memory Caching
+- Docker & System Design`;
+
+const SAMPLE_RESUME = `Alex Rivera
+Email: alex.rivera@example.com | GitHub: github.com/alexrivera-dev
+
+Summary:
+Computer Science graduate with experience developing asynchronous backend services, RAG-powered conversational agents, and LLM applications in Python and FastAPI.
+
+Technical Skills:
+Python, FastAPI, PostgreSQL, Redis, Qdrant Vector Store, Docker, PyTorch, LangChain, REST APIs
+
+Experience:
+AI Backend Intern | Nexus AI Labs (2024)
+- Architected an asynchronous REST API using FastAPI and PostgreSQL handling 15,000 requests per minute with sub-100ms response times.
+- Integrated Redis for distributed session caching, reducing database query load by 40%.
+- Improved model inference accuracy and retrieval latency by 18% through dynamic chunking and BM25 hybrid reranking.
+
+Projects:
+RAG-Powered Intelligent Document Copilot
+- Built full-stack retrieval-augmented generation system indexing 500+ research papers in Qdrant vector database.
+- Integrated streaming speech-to-text allowing real-time voice queries and answers.`;
+
+export function App() {
+  const [activeTab, setActiveTab] = useState<"ingest" | "role" | "fit" | "interview" | "report">("ingest");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Form states
+  const [jdTitle, setJdTitle] = useState("AI Engineer Intern");
+  const [jdCompany, setJdCompany] = useState("Student Credibility");
+  const [jdText, setJdText] = useState(SAMPLE_JD);
+  const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
+  const [candidateName, setCandidateName] = useState("Alex Rivera");
+
+  const [job, setJob] = useState<Job | null>(null);
+  const [resume, setResume] = useState<Resume | null>(null);
+  const [jobFit, setJobFit] = useState<JobFitResult | null>(null);
+
+  // Interview simulator states
+  const [interviewId, setInterviewId] = useState<string | null>(null);
+  const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(null);
+  const [candidateAnswer, setCandidateAnswer] = useState<string>("");
+  const [latestEvaluation, setLatestEvaluation] = useState<AnswerEvaluation | null>(null);
+  const [isSpeakingQuestion, setIsSpeakingQuestion] = useState<boolean>(false);
+  const [isListeningMic, setIsListeningMic] = useState<boolean>(false);
+  const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
+
+  const recognitionRef = useRef<any>(null);
+
+  // Report states
+  const [report, setReport] = useState<ReportData | null>(null);
+  const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(null);
+
+  useEffect(() => {
+    api.loginDemo().catch((e) => console.log("Demo auth init:", e));
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      const recognition = new SpeechRecognition();
+      recognition.continuous = true;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onresult = (event: any) => {
+        let transcript = "";
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setCandidateAnswer((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      };
+
+      recognition.onerror = () => setIsListeningMic(false);
+      recognition.onend = () => setIsListeningMic(false);
+      recognitionRef.current = recognition;
+    }
+  }, []);
+
+  const speakText = (text: string) => {
+    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+    window.speechSynthesis.cancel();
+    const utterance = new SpeechSynthesisUtterance(text);
+    utterance.rate = 1.0;
+    utterance.pitch = 0.95;
+    utterance.onstart = () => setIsSpeakingQuestion(true);
+    utterance.onend = () => setIsSpeakingQuestion(false);
+    utterance.onerror = () => setIsSpeakingQuestion(false);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const toggleMicListening = () => {
+    if (!recognitionRef.current) {
+      alert("Microphone recognition not supported in browser. Use data slot input.");
+      return;
+    }
+
+    if (isListeningMic) {
+      recognitionRef.current.stop();
+      setIsListeningMic(false);
+    } else {
+      if (isSpeakingQuestion) {
+        window.speechSynthesis.cancel();
+        setIsSpeakingQuestion(false);
+      }
+      try {
+        recognitionRef.current.start();
+        setIsListeningMic(true);
+      } catch (e) {
+        console.warn(e);
+      }
+    }
+  };
+
+  const handleAnalyzeDocuments = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      await api.loginDemo();
+
+      const createdJob = await api.createJob(jdTitle, jdText, jdCompany);
+      setJob(createdJob);
+
+      const createdResume = await api.createResume(resumeText, candidateName);
+      setResume(createdResume);
+
+      const fit = await api.calculateJobFit(createdJob.id, createdResume.id);
+      setJobFit(fit);
+
+      setActiveTab("role");
+    } catch (err: any) {
+      setError(err.message || "Failed to process documents");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleStartInterview = async () => {
+    if (!job || !resume) return;
+    try {
+      setLoading(true);
+      setError(null);
+
+      const session = await api.createInterview(job.id, resume.id, "voice");
+      setInterviewId(session.id);
+
+      const firstQ = await api.startInterview(session.id);
+      setCurrentQuestion(firstQ);
+      setLatestEvaluation(null);
+      setCandidateAnswer("");
+      setActiveTab("interview");
+      speakText(firstQ.question.text);
+    } catch (err: any) {
+      setError(err.message || "Failed to start interview");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmitAnswer = async () => {
+    if (!interviewId || !currentQuestion || !candidateAnswer.trim()) return;
+
+    if (isListeningMic && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListeningMic(false);
+    }
+
+    try {
+      setLoading(true);
+      setError(null);
+
+      const evaluation = await api.submitAnswer(
+        interviewId,
+        currentQuestion.question_id,
+        candidateAnswer,
+        45000,
+        135
+      );
+      setLatestEvaluation(evaluation);
+
+      const updatedQ = await api.getCurrentQuestion(interviewId).catch(() => null);
+      if (updatedQ && updatedQ.question_id !== currentQuestion.question_id) {
+        setTimeout(() => {
+          setCurrentQuestion(updatedQ);
+          setCandidateAnswer("");
+          speakText(updatedQ.question.text);
+        }, 1800);
+      } else {
+        setTimeout(() => {
+          handleFinishInterview();
+        }, 2000);
+      }
+    } catch (err: any) {
+      setError(err.message || "Failed to submit answer telemetry");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleFinishInterview = async () => {
+    if (!interviewId) return;
+    try {
+      setLoading(true);
+      await api.completeInterview(interviewId);
+      const rep = await api.getReport(interviewId);
+      const plan = await api.getPreparationPlan(interviewId);
+      setReport(rep);
+      setPrepPlan(plan);
+      setActiveTab("report");
+
+      confetti({
+        particleCount: 90,
+        spread: 80,
+        origin: { y: 0.6 },
+      });
+    } catch (err: any) {
+      setError(err.message || "Failed to compile diagnostic log");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-chassis text-ink pb-20">
+      {/* Top Industrial Chassis Bar */}
+      <header className="bg-chassis border-b border-[#a3b1c6]/40 shadow-card sticky top-0 z-30">
+        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-[#2d3436] shadow-sharp flex items-center justify-center border border-white/20">
+              <Cpu className="w-6 h-6 text-safety" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <span className="font-mono text-sm px-2 py-0.5 bg-safety text-white rounded font-bold uppercase tracking-wider shadow-sm">
+                  CHECKOUT // MOD-01
+                </span>
+                <span className="font-mono text-xs text-inkMuted uppercase">
+                  SYSTEM ONLINE
+                </span>
+              </div>
+              <h1 className="font-mono text-xl md:text-2xl font-bold uppercase tracking-tight text-ink mt-0.5">
+                AI Interview Accelerator Console
+              </h1>
+            </div>
+          </div>
+
+          {/* Telemetry LED Status */}
+          <div className="hidden lg:flex items-center gap-6 p-2 bg-chassis rounded-md shadow-recessed px-4">
+            <LedIndicator status="green" label="DB_CONN: OK" />
+            <LedIndicator status="green" label="CACHE: READY" />
+            <LedIndicator status="amber" label="VAD: 16KHZ" />
+          </div>
+
+          {/* Stage Buttons */}
+          <nav className="flex items-center gap-2 overflow-x-auto">
+            <button
+              onClick={() => setActiveTab("ingest")}
+              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition ${
+                activeTab === "ingest"
+                  ? "bg-[#2d3436] text-white shadow-sharp"
+                  : "bg-chassis text-ink shadow-floating hover:text-safety"
+              }`}
+            >
+              01 // INGEST
+            </button>
+            <button
+              onClick={() => setActiveTab("role")}
+              disabled={!job}
+              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+                activeTab === "role"
+                  ? "bg-[#2d3436] text-white shadow-sharp"
+                  : "bg-chassis text-ink shadow-floating hover:text-safety"
+              }`}
+            >
+              02 // ROLE_SPEC
+            </button>
+            <button
+              onClick={() => setActiveTab("fit")}
+              disabled={!jobFit}
+              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+                activeTab === "fit"
+                  ? "bg-[#2d3436] text-white shadow-sharp"
+                  : "bg-chassis text-ink shadow-floating hover:text-safety"
+              }`}
+            >
+              03 // FIT_SCORE
+            </button>
+            <button
+              onClick={() => setActiveTab("interview")}
+              disabled={!currentQuestion}
+              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+                activeTab === "interview"
+                  ? "bg-safety text-white shadow-safety"
+                  : "bg-chassis text-ink shadow-floating hover:text-safety"
+              }`}
+            >
+              04 // SIMULATOR
+            </button>
+            <button
+              onClick={() => setActiveTab("report")}
+              disabled={!report}
+              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+                activeTab === "report"
+                  ? "bg-[#10b981] text-white shadow-sharp"
+                  : "bg-chassis text-ink shadow-floating hover:text-safety"
+              }`}
+            >
+              05 // TELEMETRY
+            </button>
+          </nav>
+        </div>
+      </header>
+
+      {/* Main Console Viewport */}
+      <main className="max-w-7xl mx-auto px-6 pt-8">
+        {error && (
+          <div className="mb-6 p-4 bg-[#fee2e2] rounded-lg shadow-sharp border border-safety/60 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <AlertOctagon className="w-5 h-5 text-safety" />
+              <span className="font-mono text-sm text-safety font-bold uppercase">{error}</span>
+            </div>
+            <button onClick={() => setError(null)} className="font-mono text-xs font-bold uppercase text-ink">
+              DISMISS
+            </button>
+          </div>
+        )}
+
+        {/* TAB 1: INGEST */}
+        {activeTab === "ingest" && (
+          <div className="space-y-8">
+            <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 border-b border-[#a3b1c6]/30 pb-4">
+              <div>
+                <span className="font-mono text-xs uppercase text-inkMuted">
+                  SUBSYSTEM: SPECIFICATION_PARSER
+                </span>
+                <h2 className="font-mono text-2xl font-bold uppercase tracking-tight text-ink mt-1">
+                  Load Target Requirements & Candidate Profile
+                </h2>
+              </div>
+              <div className="flex items-center gap-3">
+                <LedIndicator status="green" label="PARSER_READY" />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-8">
+              {/* Job Panel */}
+              <IndustrialCard title="01 // TARGET JOB DESCRIPTION" subtitle="ENTER ROLES & REQUIREMENTS">
+                <div className="space-y-4">
+                  <IndustrialInput
+                    label="Role Title"
+                    badge="MANDATORY"
+                    value={jdTitle}
+                    onChange={(e) => setJdTitle(e.target.value)}
+                  />
+                  <IndustrialInput
+                    label="Target Organization"
+                    badge="METADATA"
+                    value={jdCompany}
+                    onChange={(e) => setJdCompany(e.target.value)}
+                  />
+                  <IndustrialTextarea
+                    label="Job Description Payload"
+                    badge="RAW_TEXT"
+                    rows={8}
+                    value={jdText}
+                    onChange={(e) => setJdText(e.target.value)}
+                  />
+                </div>
+              </IndustrialCard>
+
+              {/* Resume Panel */}
+              <IndustrialCard title="02 // CANDIDATE DOSSIER" subtitle="VERIFIABLE CLAIMS & EXPERIENCE">
+                <div className="space-y-4">
+                  <IndustrialInput
+                    label="Candidate Name"
+                    badge="IDENTIFIER"
+                    value={candidateName}
+                    onChange={(e) => setCandidateName(e.target.value)}
+                  />
+                  <IndustrialTextarea
+                    label="Resume Text Payload"
+                    badge="RAW_TEXT"
+                    rows={12}
+                    value={resumeText}
+                    onChange={(e) => setResumeText(e.target.value)}
+                  />
+                </div>
+              </IndustrialCard>
+            </div>
+
+            <div className="flex justify-center pt-4">
+              <IndustrialButton
+                size="lg"
+                variant="primary"
+                onClick={handleAnalyzeDocuments}
+                disabled={loading}
+              >
+                {loading ? (
+                  <>
+                    <Activity className="w-5 h-5 animate-spin" /> EXECUTING EXTRACTION PIPELINE...
+                  </>
+                ) : (
+                  <>
+                    EXECUTE ANALYSIS & COMPUTE JOB FIT <ArrowRight className="w-5 h-5" />
+                  </>
+                )}
+              </IndustrialButton>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 2: ROLE SPEC */}
+        {activeTab === "role" && job && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#a3b1c6]/30 pb-4">
+              <div>
+                <span className="font-mono text-xs uppercase text-inkMuted">
+                  SUBSYSTEM: ROLE_DECOMPOSITION
+                </span>
+                <h2 className="font-mono text-2xl font-bold uppercase tracking-tight text-ink mt-1">
+                  {job.analysis?.role_title || job.title}
+                </h2>
+                <p className="font-mono text-xs text-inkMuted mt-0.5">
+                  CALIBRATED SENIORITY: <strong className="text-safety uppercase">{job.analysis?.seniority}</strong>
+                </p>
+              </div>
+
+              <IndustrialButton size="md" variant="secondary" onClick={() => setActiveTab("fit")}>
+                PROCEED TO FIT DIAGNOSTICS <ArrowRight className="w-4 h-4" />
+              </IndustrialButton>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Required Skills */}
+              <IndustrialCard title="COMPETENCY_REGISTER: REQUIRED" subtitle="CORE TECHNICAL PREREQUISITES">
+                <div className="flex flex-wrap gap-2 mb-6">
+                  {job.analysis?.required_skills.map((skill, i) => (
+                    <span
+                      key={i}
+                      className="font-mono text-xs font-bold px-3 py-1.5 bg-chassis text-ink rounded shadow-floating border border-white/60"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+
+                <span className="font-mono text-xs font-bold uppercase text-inkMuted block mb-2">
+                  SECONDARY / PREFERRED
+                </span>
+                <div className="flex flex-wrap gap-2">
+                  {job.analysis?.preferred_skills.map((skill, i) => (
+                    <span
+                      key={i}
+                      className="font-mono text-xs px-2.5 py-1 bg-recessed text-inkMuted rounded shadow-recessed"
+                    >
+                      {skill}
+                    </span>
+                  ))}
+                </div>
+              </IndustrialCard>
+
+              {/* Technical Profile */}
+              <IndustrialCard title="ARCHITECTURE & BEHAVIOR" subtitle="OPERATIONAL ATTRIBUTES">
+                <div className="space-y-4">
+                  <div className="p-3 bg-chassis rounded shadow-recessed">
+                    <span className="font-mono text-[10px] text-inkMuted uppercase block">
+                      TECHNICAL DOMAINS
+                    </span>
+                    <p className="font-mono text-xs text-ink mt-1 font-bold">
+                      {job.analysis?.technical_competencies.join(" // ")}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-chassis rounded shadow-recessed">
+                    <span className="font-mono text-[10px] text-inkMuted uppercase block">
+                      BEHAVIOURAL BENCHMARKS
+                    </span>
+                    <p className="font-mono text-xs text-ink mt-1 font-bold">
+                      {job.analysis?.behavioral_competencies.join(" // ")}
+                    </p>
+                  </div>
+
+                  <div className="p-3 bg-chassis rounded shadow-recessed">
+                    <span className="font-mono text-[10px] text-inkMuted uppercase block">
+                      EXPERIENCE EXPECTATIONS
+                    </span>
+                    <p className="font-mono text-xs text-ink mt-1 italic">
+                      {job.analysis?.experience_expectations}
+                    </p>
+                  </div>
+                </div>
+              </IndustrialCard>
+
+              {/* Responsibilities */}
+              <IndustrialCard title="OPERATIONAL RESPONSIBILITIES" subtitle="DEPLOYMENT SCOPE" className="md:col-span-2">
+                <ul className="space-y-2 font-mono text-xs text-ink">
+                  {job.analysis?.responsibilities.map((r, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="text-safety font-bold">[{i + 1}]</span>
+                      <span>{r}</span>
+                    </li>
+                  ))}
+                </ul>
+              </IndustrialCard>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 3: FIT SCORE */}
+        {activeTab === "fit" && jobFit && (
+          <div className="space-y-6">
+            <div className="flex flex-wrap items-center justify-between gap-4 border-b border-[#a3b1c6]/30 pb-4">
+              <div>
+                <span className="font-mono text-xs uppercase text-inkMuted">
+                  SUBSYSTEM: HYBRID_FIT_ENGINE
+                </span>
+                <h2 className="font-mono text-2xl font-bold uppercase tracking-tight text-ink mt-1">
+                  Explainable Fit Diagnostic
+                </h2>
+              </div>
+
+              <IndustrialButton size="lg" variant="primary" onClick={handleStartInterview}>
+                INITIATE SIMULATOR ROUNDS <Play className="w-4 h-4 fill-white" />
+              </IndustrialButton>
+            </div>
+
+            {/* Score HUD */}
+            <div className="p-6 bg-chassis rounded-xl shadow-floating border border-white/60 flex flex-col md:flex-row items-center justify-between gap-6">
+              <div className="text-center md:text-left">
+                <span className="font-mono text-xs text-inkMuted uppercase block">
+                  CUMULATIVE CALIBRATION SCORE
+                </span>
+                <div className="font-mono text-5xl md:text-6xl font-bold text-ink mt-1">
+                  {jobFit.overall_score}%
+                </div>
+                <span className="font-mono text-xs text-safety font-bold uppercase">
+                  CLASSIFICATION: {jobFit.classification}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 flex-1 max-w-2xl">
+                {Object.entries(jobFit.dimensions).map(([k, v]) => (
+                  <div key={k} className="p-3 bg-chassis rounded shadow-recessed">
+                    <span className="font-mono text-[10px] text-inkMuted uppercase block truncate">
+                      {k.replace("_", " ")}
+                    </span>
+                    <span className="font-mono text-lg font-bold text-ink">{v}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Evidence Tables */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Verified Matches */}
+              <IndustrialCard title="VERIFIED COMPETENCIES" subtitle="EVIDENCE-BACKED OVERLAP">
+                <div className="space-y-3">
+                  {jobFit.matches.map((m, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
+                        <span className="font-mono text-[10px] bg-[#10b981] text-white px-2 py-0.5 rounded">
+                          VERIFIED
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-inkMuted mt-1">
+                        <strong>JD:</strong> {m.jd_evidence}
+                      </p>
+                      <p className="font-mono text-[11px] text-ink mt-0.5">
+                        <strong>RESUME:</strong> {m.resume_evidence}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </IndustrialCard>
+
+              {/* Partial & Missing */}
+              <IndustrialCard title="DEFICITS & PARTIAL MATCHES" subtitle="CALIBRATION TARGETS">
+                <div className="space-y-3">
+                  {jobFit.partial_matches.map((p, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-safety">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{p.skill}</span>
+                        <span className="font-mono text-[10px] bg-[#f59e0b] text-white px-2 py-0.5 rounded">
+                          PARTIAL
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-safety mt-1 font-bold">
+                        GAP: {p.gap}
+                      </p>
+                    </div>
+                  ))}
+
+                  {jobFit.missing_skills.map((m, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-[#2d3436]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
+                        <span className="font-mono text-[10px] bg-safety text-white px-2 py-0.5 rounded">
+                          MISSING
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-inkMuted mt-1">
+                        Skill not detected in resume artifacts.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </IndustrialCard>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 4: SIMULATOR */}
+        {activeTab === "interview" && currentQuestion && (
+          <div className="space-y-6">
+            {/* Header Stage HUD */}
+            <div className="p-4 bg-chassis rounded-lg shadow-card border border-white/60 flex flex-wrap items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <div className="w-10 h-10 rounded bg-[#2d3436] text-white font-mono text-base font-bold flex items-center justify-center shadow-sharp">
+                  Q{currentQuestion.sequence}
+                </div>
+                <div>
+                  <span className="font-mono text-[10px] uppercase text-inkMuted">
+                    SIMULATION PHASE
+                  </span>
+                  <div className="font-mono text-base font-bold uppercase text-safety">
+                    {currentQuestion.level.replace("_", " ")} ROUND
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-6 font-mono text-xs text-ink">
+                <span>DIFFICULTY: <strong>{currentQuestion.question.difficulty} / 10</strong></span>
+                <span>PROGRESS: <strong>{currentQuestion.state.progress_percent}%</strong></span>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => setTtsEnabled(!ttsEnabled)}
+                  className="p-2 rounded bg-chassis shadow-floating text-ink hover:text-safety"
+                  title="Toggle Speech Audio"
+                >
+                  {ttsEnabled ? <Volume2 className="w-4 h-4" /> : <VolumeX className="w-4 h-4 text-safety" />}
+                </button>
+                <IndustrialButton size="sm" variant="dark" onClick={handleFinishInterview}>
+                  ABORT & COMPILE
+                </IndustrialButton>
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-3 gap-6">
+              {/* Left Column: Instruments */}
+              <div className="space-y-6">
+                <IndustrialMonitor />
+                <OscilloscopeWave
+                  isListening={isListeningMic}
+                  isSpeaking={isSpeakingQuestion}
+                />
+              </div>
+
+              {/* Right Column: Question Terminal & Answer */}
+              <div className="md:col-span-2 space-y-6">
+                {/* CRT Terminal Screen for Question */}
+                <div className="p-6 bg-[#1e272e] rounded-lg shadow-recessed border border-[#1e272e] relative overflow-hidden">
+                  <div className="flex items-center justify-between mb-3 border-b border-[#34495e] pb-2">
+                    <span className="font-mono text-xs text-[#2ed573] font-bold uppercase tracking-wider flex items-center gap-2">
+                      <Terminal className="w-4 h-4" /> INTERVIEWER_QUERY_CHANNEL
+                    </span>
+                    <button
+                      onClick={() => speakText(currentQuestion.question.text)}
+                      className="font-mono text-xs text-[#a4b0be] hover:text-white flex items-center gap-1 underline"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" /> RE-SYNTHESIZE
+                    </button>
+                  </div>
+
+                  <p className="font-mono text-base leading-relaxed text-[#ecf0f1]">
+                    {currentQuestion.question.text}
+                  </p>
+
+                  <div className="mt-4 pt-2 border-t border-[#34495e] flex items-center justify-between font-mono text-[10px] text-[#7f8c8d] uppercase">
+                    <span>TARGET_COMPETENCY: {currentQuestion.question.competency}</span>
+                    <span>TYPE: {currentQuestion.question.type}</span>
+                  </div>
+
+                  <div className="absolute inset-0 crt-scanlines pointer-events-none" />
+                </div>
+
+                {/* Candidate Transmission Slot */}
+                <IndustrialCard title="03 // CANDIDATE TRANSMISSION" subtitle="AUDIO STT OR DIRECT DATA ENTRY">
+                  <IndustrialTextarea
+                    rows={6}
+                    value={candidateAnswer}
+                    onChange={(e) => setCandidateAnswer(e.target.value)}
+                    placeholder="CLICK 'AUDIO RECEIVER' OR TYPE CANDIDATE RESPONSE..."
+                  />
+
+                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-3 border-t border-[#a3b1c6]/30">
+                    <IndustrialButton
+                      variant={isListeningMic ? "primary" : "secondary"}
+                      onClick={toggleMicListening}
+                    >
+                      <Mic className={`w-4 h-4 ${isListeningMic ? "animate-pulse" : ""}`} />
+                      {isListeningMic ? "HALT AUDIO CAPTURE" : "ENGAGE AUDIO RECEIVER"}
+                    </IndustrialButton>
+
+                    <IndustrialButton
+                      variant="primary"
+                      onClick={handleSubmitAnswer}
+                      disabled={loading || !candidateAnswer.trim()}
+                    >
+                      {loading ? "EVALUATING TELEMETRY..." : "TRANSMIT ANSWER & ADVANCE"}
+                    </IndustrialButton>
+                  </div>
+                </IndustrialCard>
+
+                {/* Real-time telemetry feedback */}
+                {latestEvaluation && (
+                  <div className="p-4 bg-chassis rounded-lg shadow-card border border-white/60">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="font-mono text-xs font-bold uppercase text-ink">
+                        EVALUATION TELEMETRY: {latestEvaluation.assessment}
+                      </span>
+                      <span className="font-mono text-base font-bold text-safety">
+                        {latestEvaluation.overall_score} / 10
+                      </span>
+                    </div>
+                    <p className="font-mono text-xs text-inkMuted">
+                      <strong>STRENGTH:</strong> {latestEvaluation.strengths[0] || "Valid technical baseline."}
+                    </p>
+                    <p className="font-mono text-xs text-safety mt-1 font-bold">
+                      <strong>PROBE_VECTOR:</strong> {latestEvaluation.follow_up_reason}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 5: REPORT */}
+        {activeTab === "report" && report && (
+          <div className="space-y-8">
+            <div className="border-b border-[#a3b1c6]/30 pb-4 text-center md:text-left flex flex-col md:flex-row justify-between items-center gap-4">
+              <div>
+                <span className="font-mono text-xs uppercase text-inkMuted">
+                  TELEMETRY ARCHIVE: PERFORMANCE_DOSSIER
+                </span>
+                <h2 className="font-mono text-3xl font-bold uppercase tracking-tight text-ink mt-1">
+                  Final Performance Calibration Report
+                </h2>
+              </div>
+
+              <IndustrialButton size="md" variant="secondary" onClick={() => setActiveTab("ingest")}>
+                <RotateCcw className="w-4 h-4" /> RESTART SESSION
+              </IndustrialButton>
+            </div>
+
+            {/* Overall Score Plaque */}
+            <div className="p-8 bg-chassis rounded-xl shadow-floating border border-white/60 flex flex-col md:flex-row items-center justify-around gap-6 text-center md:text-left">
+              <div>
+                <span className="font-mono text-xs text-inkMuted uppercase block">
+                  AGGREGATED READINESS RATING
+                </span>
+                <div className="font-mono text-6xl font-bold text-ink mt-1">
+                  {report.overall_score}%
+                </div>
+              </div>
+
+              <div className="p-4 bg-chassis rounded-lg shadow-recessed border border-[#a3b1c6]/40 text-center">
+                <span className="font-mono text-[10px] text-inkMuted uppercase block">
+                  CLASSIFICATION SEAL
+                </span>
+                <div className="font-mono text-xl font-bold text-safety mt-1 uppercase tracking-wider">
+                  [{report.readiness.classification}]
+                </div>
+              </div>
+            </div>
+
+            {/* Rubrics */}
+            <div>
+              <span className="font-mono text-xs uppercase text-inkMuted block mb-3">
+                COMPETENCY MATRIX CALIBRATION
+              </span>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                {[
+                  { label: "ROLE_FIT", val: report.role_fit },
+                  { label: "TECH_KNOWLEDGE", val: report.technical_knowledge },
+                  { label: "PROBLEM_SOLVING", val: report.problem_solving },
+                  { label: "COMMUNICATION", val: report.communication },
+                  { label: "CONFIDENCE", val: report.confidence },
+                  { label: "DEPTH_UNDERSTANDING", val: report.depth },
+                  { label: "BEHAVIOURAL_FIT", val: report.behavioral_fit },
+                  { label: "MEAN_SCORE", val: report.overall_score },
+                ].map((item, i) => (
+                  <div key={i} className="p-4 bg-chassis rounded-lg shadow-card border border-white/40">
+                    <span className="font-mono text-[10px] text-inkMuted uppercase block">{item.label}</span>
+                    <span className="font-mono text-2xl font-bold text-ink mt-1 block">{item.val}%</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Strengths & Weaknesses */}
+            <div className="grid md:grid-cols-2 gap-6">
+              <IndustrialCard title="DEMONSTRATED CAPABILITIES" subtitle="VERIFIED STRENGTHS">
+                <ul className="space-y-2 font-mono text-xs text-ink">
+                  {report.strengths.map((s, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="text-[#10b981] font-bold">[+]</span>
+                      <span>{s}</span>
+                    </li>
+                  ))}
+                </ul>
+              </IndustrialCard>
+
+              <IndustrialCard title="IDENTIFIED VULNERABILITIES" subtitle="AREAS REQUIRING CALIBRATION">
+                <ul className="space-y-2 font-mono text-xs text-ink">
+                  {report.weaknesses.map((w, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="text-safety font-bold">[-]</span>
+                      <span>{w}</span>
+                    </li>
+                  ))}
+                </ul>
+              </IndustrialCard>
+            </div>
+
+            {/* Preparation Modules */}
+            {prepPlan && (
+              <div>
+                <span className="font-mono text-xs uppercase text-inkMuted block mb-3">
+                  PRIORITIZED PREPARATION MODULES
+                </span>
+                <div className="grid md:grid-cols-3 gap-6">
+                  {prepPlan.items.map((item, i) => (
+                    <IndustrialCard key={i} title={item.topic} subtitle={`PRIORITY: ${item.priority.toUpperCase()}`}>
+                      <p className="font-mono text-[11px] text-safety mb-3 font-bold">
+                        TRIGGER: {item.reason}
+                      </p>
+                      <ul className="space-y-1.5 font-mono text-[11px] text-ink">
+                        {item.action_items.map((act, j) => (
+                          <li key={j} className="flex items-start gap-1.5">
+                            <span className="text-inkMuted">»</span>
+                            <span>{act}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </IndustrialCard>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+      </main>
+    </div>
+  );
+}
+
+export default App;
