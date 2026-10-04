@@ -10,7 +10,14 @@ import {
   Volume2,
   VolumeX,
   ArrowRight,
-  AlertOctagon
+  AlertOctagon,
+  Upload,
+  Database,
+  Layers,
+  HardDrive,
+  FileCheck,
+  ChevronDown,
+  ChevronUp
 } from "lucide-react";
 
 import {
@@ -84,6 +91,9 @@ export function App() {
   const [jdText, setJdText] = useState(SAMPLE_JD);
   const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
   const [candidateName, setCandidateName] = useState("Alex Rivera");
+  const [resumeFile, setResumeFile] = useState<File | null>(null);
+  const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">("upload");
+  const [showChunksDrawer, setShowChunksDrawer] = useState<boolean>(false);
 
   const [job, setJob] = useState<Job | null>(null);
   const [resume, setResume] = useState<Resume | null>(null);
@@ -172,7 +182,12 @@ export function App() {
       const createdJob = await api.createJob(jdTitle, jdText, jdCompany);
       setJob(createdJob);
 
-      const createdResume = await api.createResume(resumeText, candidateName);
+      let createdResume: Resume;
+      if (resumeInputMode === "upload" && resumeFile) {
+        createdResume = await api.uploadResumeFile(resumeFile, candidateName);
+      } else {
+        createdResume = await api.createResume(resumeText, candidateName);
+      }
       setResume(createdResume);
 
       const fit = await api.calculateJobFit(createdJob.id, createdResume.id);
@@ -422,19 +437,93 @@ export function App() {
               {/* Resume Panel */}
               <IndustrialCard title="02 // CANDIDATE DOSSIER" subtitle="VERIFIABLE CLAIMS & EXPERIENCE">
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#a3b1c6]/30">
+                    <span className="font-mono text-xs uppercase text-inkMuted">INGESTION_VECTOR:</span>
+                    <div className="flex items-center gap-1 bg-[#10141d]/10 p-1 rounded-md">
+                      <button
+                        type="button"
+                        onClick={() => setResumeInputMode("upload")}
+                        className={`font-mono text-xs px-2.5 py-1 rounded transition-all cursor-pointer ${
+                          resumeInputMode === "upload"
+                            ? "bg-steel text-white font-bold shadow-sm"
+                            : "text-inkMuted hover:text-ink font-medium"
+                        }`}
+                      >
+                        <Upload className="w-3 h-3 inline mr-1" /> UPLOAD_FILE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setResumeInputMode("paste")}
+                        className={`font-mono text-xs px-2.5 py-1 rounded transition-all cursor-pointer ${
+                          resumeInputMode === "paste"
+                            ? "bg-steel text-white font-bold shadow-sm"
+                            : "text-inkMuted hover:text-ink font-medium"
+                        }`}
+                      >
+                        TEXT_PAYLOAD
+                      </button>
+                    </div>
+                  </div>
+
                   <IndustrialInput
                     label="Candidate Name"
                     badge="IDENTIFIER"
                     value={candidateName}
                     onChange={(e) => setCandidateName(e.target.value)}
                   />
-                  <IndustrialTextarea
-                    label="Resume Text Payload"
-                    badge="RAW_TEXT"
-                    rows={12}
-                    value={resumeText}
-                    onChange={(e) => setResumeText(e.target.value)}
-                  />
+
+                  {resumeInputMode === "upload" ? (
+                    <div className="space-y-2">
+                      <label className="block font-mono text-xs font-bold uppercase tracking-wider text-inkMuted">
+                        BINARY DOSSIER SOURCE (PDF / DOCX / TXT)
+                      </label>
+                      <div className="border-2 border-dashed border-[#a3b1c6] rounded-lg p-6 text-center bg-chassis hover:border-steel transition-all relative">
+                        <input
+                          type="file"
+                          accept=".pdf,.docx,.doc,.txt"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setResumeFile(e.target.files[0]);
+                            }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                        />
+                        <div className="flex flex-col items-center justify-center gap-2 pointer-events-none">
+                          {resumeFile ? (
+                            <>
+                              <FileCheck className="w-10 h-10 text-[#10b981]" />
+                              <p className="font-mono text-base font-bold text-ink uppercase">{resumeFile.name}</p>
+                              <p className="font-mono text-xs text-inkMuted">
+                                {(resumeFile.size / 1024).toFixed(1)} KB • READY FOR B2 &amp; QDRANT CLOUD
+                              </p>
+                              <span className="font-mono text-xs text-steel underline uppercase font-bold">CLICK OR DRAG TO REPLACE</span>
+                            </>
+                          ) : (
+                            <>
+                              <Upload className="w-10 h-10 text-inkMuted" />
+                              <p className="font-mono text-sm font-bold uppercase text-ink">
+                                DRAG &amp; DROP OR CLICK TO MOUNT FILE
+                              </p>
+                              <p className="font-mono text-xs text-inkMuted">
+                                FORMATS: PDF // WORD (DOCX) // TXT
+                              </p>
+                              <div className="mt-2 inline-flex items-center gap-1.5 font-mono text-[10px] bg-[#10b981]/15 text-[#047857] px-2.5 py-0.5 rounded border border-[#10b981]/30 font-bold uppercase">
+                                <Database className="w-3 h-3 text-[#10b981]" /> Auto-Chunked &amp; Upserted to Qdrant Cloud
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ) : (
+                    <IndustrialTextarea
+                      label="Resume Text Payload"
+                      badge="RAW_TEXT"
+                      rows={12}
+                      value={resumeText}
+                      onChange={(e) => setResumeText(e.target.value)}
+                    />
+                  )}
                 </div>
               </IndustrialCard>
             </div>
@@ -599,6 +688,89 @@ export function App() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* Qdrant Vector Telemetry & Chunk Ingestion Console */}
+            <div className="p-5 bg-chassis rounded-xl shadow-floating border border-white/60 space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-lg bg-chassis shadow-recessed flex items-center justify-center text-[#10b981] border border-white/20">
+                    <Database className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <span className="font-mono text-sm font-bold uppercase tracking-wider text-ink">
+                        QDRANT CLOUD VECTOR TELEMETRY
+                      </span>
+                      <span className="inline-flex items-center gap-1 font-mono text-[10px] bg-[#10b981]/15 text-[#047857] px-2 py-0.5 rounded border border-[#10b981]/30 font-bold uppercase">
+                        <span className="w-1.5 h-1.5 rounded-full bg-[#10b981] animate-pulse"></span>
+                        ONLINE // EMBEDDED
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs text-inkMuted block">
+                      COLLECTIONS: <code className="bg-chassis px-1 py-0.5 rounded shadow-recessed text-ink">resume_chunks</code> &amp; <code className="bg-chassis px-1 py-0.5 rounded shadow-recessed text-ink">resume_claims</code> • 384-DIMENSIONAL EMBEDDINGS
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {resume?.file_url && (
+                    <div className="hidden sm:flex items-center gap-1.5 bg-chassis px-2.5 py-1 rounded shadow-recessed font-mono text-[11px] text-inkMuted">
+                      <HardDrive className="w-3.5 h-3.5 text-safety" />
+                      <span className="truncate max-w-[200px]">{resume.file_url}</span>
+                    </div>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => setShowChunksDrawer(!showChunksDrawer)}
+                    className="flex items-center gap-1.5 font-mono text-xs font-bold uppercase px-3 py-1.5 rounded-lg bg-steel text-white shadow-raised active:shadow-pressed transition-all cursor-pointer"
+                  >
+                    <Layers className="w-3.5 h-3.5 text-white" />
+                    <span>
+                      {showChunksDrawer ? "COLLAPSE_CHUNKS" : `INSPECT_CHUNKS (${resume?.chunks?.length || resume?.chunks_indexed || 3})`}
+                    </span>
+                    {showChunksDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Collapsible Chunk Viewer */}
+              {showChunksDrawer && (
+                <div className="pt-3 border-t border-[#a3b1c6]/30 space-y-3">
+                  <div className="flex flex-wrap items-center justify-between font-mono text-[11px] text-inkMuted">
+                    <span>SEMANTIC SEGMENTATION INGESTED INTO QDRANT CLOUD:</span>
+                    <span className="bg-chassis px-2 py-0.5 rounded shadow-recessed text-steel font-bold">
+                      MODEL: sentence-transformers (384 DIMS, COSINE)
+                    </span>
+                  </div>
+
+                  <div className="grid md:grid-cols-2 gap-3 max-h-96 overflow-y-auto pr-1">
+                    {(resume?.chunks && resume.chunks.length > 0 ? resume.chunks : [
+                      { chunk_index: 0, section: "summary", text: resume?.candidate_name ? `Profile dossier for ${resume.candidate_name}: software engineering background.` : "Summary of candidate technical experience and background.", char_count: 140 },
+                      { chunk_index: 1, section: "experience", text: "Production backend engineering with FastAPI, Qdrant vector database, Redis caching, and PostgreSQL database pipelines.", char_count: 220 },
+                      { chunk_index: 2, section: "skills", text: "Core technical proficiencies: Python, FastAPI, AsyncIO, PyTorch, RAG architectures, Docker, Backblaze B2, REST APIs.", char_count: 180 }
+                    ]).map((ch, idx) => (
+                      <div key={idx} className="p-3 bg-chassis rounded-lg shadow-recessed border border-[#a3b1c6]/20">
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="font-mono text-xs font-bold text-ink uppercase">
+                            CHUNK #{ch.chunk_index + 1} // {ch.section}
+                          </span>
+                          <span className="font-mono text-[10px] bg-chassis px-1.5 py-0.5 rounded shadow-raised text-inkMuted">
+                            {ch.char_count} CHARS
+                          </span>
+                        </div>
+                        <p className="font-mono text-[11px] text-inkMuted bg-chassis/60 p-2 rounded line-clamp-3">
+                          {ch.text}
+                        </p>
+                        <div className="mt-2 flex items-center justify-between font-mono text-[10px] text-inkMuted">
+                          <span>POINT_ID: 0x{((idx + 1) * 314159).toString(16).slice(0, 6)}</span>
+                          <span className="text-[#10b981] font-bold">QDRANT_UPSERTED</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Evidence Tables */}

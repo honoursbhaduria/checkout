@@ -117,6 +117,10 @@ class ResumeResponse(BaseModel):
     status: str
     created_at: datetime
     claims: List[ResumeClaimResponse] = []
+    file_url: Optional[str] = None
+    chunks_indexed: int = 0
+    chunks: List[Dict[str, Any]] = []
+    vector_collection: str = "resume_chunks"
 
 
 # --- Job Fit Schemas ---

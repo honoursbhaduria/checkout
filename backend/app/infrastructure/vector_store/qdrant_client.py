@@ -16,8 +16,8 @@ class QdrantVectorStore:
     """
 
     def __init__(self, url: Optional[str] = None, api_key: Optional[str] = None, host: str = "localhost", port: int = 6333):
-        self.url = url or os.environ.get("QDRANT_URL")
-        self.api_key = api_key or os.environ.get("QDRANT_API_KEY")
+        self.url = url or settings.QDRANT_URL or os.environ.get("QDRANT_URL")
+        self.api_key = api_key or settings.QDRANT_API_KEY or os.environ.get("QDRANT_API_KEY")
         self.host = host
         self.port = port
         self._client: Optional[QdrantClient] = None

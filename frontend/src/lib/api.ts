@@ -40,12 +40,23 @@ export interface ResumeClaim {
   verified: boolean;
 }
 
+export interface ResumeChunk {
+  chunk_index: number;
+  text: string;
+  section: string;
+  char_count: number;
+}
+
 export interface Resume {
   id: string;
   candidate_name?: string;
   skills: string[];
   experience_years: number;
   claims: ResumeClaim[];
+  file_url?: string;
+  chunks_indexed?: number;
+  chunks?: ResumeChunk[];
+  vector_collection?: string;
 }
 
 export interface SkillMatch {
@@ -218,6 +229,29 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify({ raw_text, candidate_name }),
     });
+  }
+
+  async uploadResumeFile(file: File, candidate_name?: string): Promise<Resume> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (candidate_name) {
+      formData.append("candidate_name", candidate_name);
+    }
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE}/resumes/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error?.message || "Failed to upload and parse resume file");
+    }
+    return json.data as Resume;
   }
 
   async calculateJobFit(job_id: string, resume_id: string): Promise<JobFitResult> {
