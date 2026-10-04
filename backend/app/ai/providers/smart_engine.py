@@ -353,38 +353,127 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
         answer_text: str,
         difficulty: int
     ) -> Dict[str, Any]:
-        ans_lower = answer_text.lower()
-        word_count = len(answer_text.split())
+        ans_clean = (answer_text or "").strip()
+        ans_lower = ans_clean.lower()
+        words = ans_lower.split()
+        word_count = len(words)
 
-        # Length & depth heuristics
-        if word_count < 15:
-            relevance = 5.0
-            correctness = 5.5
-            depth = 4.0
-            communication = 5.0
-            reasoning = 4.5
-            assessment = "NEEDS_IMPROVEMENT"
-            strengths = ["Attempted an initial response."]
-            weaknesses = ["Response was too brief and lacked concrete technical specifics."]
+        # 1. Refusal / Non-answer detection ("I don't know", "idk", "pass", "no idea", etc.)
+        refusal_patterns = [
+            "don't know", "dont know", "do not know", "idk", "no idea",
+            "no clue", "pass", "skip", "not sure", "dunno", "cannot answer",
+            "can't answer", "nothing", "na", "n/a", "no answer", "who knows",
+            "i forgot", "forgot", "no thoughts", "no comment"
+        ]
+        is_refusal = any(p in ans_lower for p in refusal_patterns) and word_count <= 18
+
+        if is_refusal or word_count == 0:
+            return {
+                "overall_score": 0.5,
+                "relevance_score": 0.5,
+                "correctness_score": 0.0,
+                "depth_score": 0.0,
+                "communication_score": 1.0,
+                "reasoning_score": 0.0,
+                "assessment": "REFUSED / UNANSWERED",
+                "strengths": ["Candidate was transparent about not having the answer."],
+                "weaknesses": [
+                    "Candidate stated they did not know the answer or declined to respond.",
+                    "Demonstrated zero technical competence on this question."
+                ],
+                "missing_points": ["Did not provide any technical explanation, framework, or approach."],
+                "follow_up_reason": "Candidate was unable to answer. Step back to probe core fundamental concepts."
+            }
+
+        # 2. Gibberish / Character mash / Spam detection (< 4 words with non-technical tokens, or repetitive chars)
+        has_repetition = any(len(set(w)) <= 2 and len(w) >= 4 for w in words)
+        is_too_short = word_count < 4
+        if is_too_short or has_repetition:
+            return {
+                "overall_score": 0.3,
+                "relevance_score": 0.2,
+                "correctness_score": 0.0,
+                "depth_score": 0.0,
+                "communication_score": 0.5,
+                "reasoning_score": 0.0,
+                "assessment": "GIBBERISH / INSUFFICIENT",
+                "strengths": ["Input received."],
+                "weaknesses": [
+                    "Answer contains insufficient or incoherent text with no technical substance.",
+                    "Candidate did not articulate an explanation."
+                ],
+                "missing_points": ["A coherent, technical response addressing the prompt."],
+                "follow_up_reason": "Input was incoherent or too brief. Ask candidate to provide a clear explanation."
+            }
+
+        # 3. Off-Topic / Zero Technical Relevance Check
+        tech_dictionary = {
+            "api", "rest", "fastapi", "django", "flask", "python", "sql", "postgres",
+            "redis", "cache", "latency", "throughput", "model", "llm", "rag", "vector",
+            "embedding", "chunk", "chunking", "retrieval", "metric", "accuracy", "precision",
+            "recall", "f1", "concurrency", "async", "await", "coroutine", "thread",
+            "process", "lock", "ttl", "database", "query", "index", "docker", "cloud",
+            "aws", "pipeline", "data", "system", "architecture", "microservice", "scale",
+            "test", "eval", "evaluation", "star", "framework", "performance", "benchmark"
+        }
+        ans_word_set = set(re.findall(r"\b[a-z]{3,}\b", ans_lower))
+        tech_overlap = ans_word_set & tech_dictionary
+
+        # If substantial answer but 0 technical words or relevance to question
+        q_words = set(re.findall(r"\b[a-z]{3,}\b", question_text.lower()))
+        question_overlap = ans_word_set & q_words
+        if len(tech_overlap) == 0 and len(question_overlap) < 2 and word_count >= 8:
+            return {
+                "overall_score": 1.2,
+                "relevance_score": 1.0,
+                "correctness_score": 0.5,
+                "depth_score": 0.5,
+                "communication_score": 3.0,
+                "reasoning_score": 0.5,
+                "assessment": "OFF_TOPIC",
+                "strengths": ["Communicated in grammatical sentences."],
+                "weaknesses": [
+                    "Response was completely off-topic and failed to address the technical question.",
+                    "Contained no relevant technical concepts or domain keywords."
+                ],
+                "missing_points": ["Did not address the question topic or target competency."],
+                "follow_up_reason": "Response was off-topic. Refocus candidate directly on the question."
+            }
+
+        # 4. Weak / Superficial Answers (4 to 20 words, limited depth)
+        if word_count < 20:
+            relevance = 4.0
+            correctness = 3.0
+            depth = 2.0
+            communication = 4.0
+            reasoning = 2.5
+            assessment = "WEAK / SUPERFICIAL"
+            strengths = ["Identified a relevant basic concept or technology."]
+            weaknesses = [
+                "Response was too brief and lacked architectural depth or justification.",
+                "Did not explain trade-offs, execution mechanics, or measurable impact."
+            ]
             missing = ["Did not explain technical mechanisms, trade-offs, or quantifiable metrics."]
             follow_up = "Candidate provided minimal detail. Probe for specific technical mechanics."
-        elif word_count < 50:
+        # 5. Satisfactory Answers (20 to 55 words, covers core mechanics)
+        elif word_count < 55:
             relevance = 7.2
             correctness = 7.0
             depth = 6.5
             communication = 7.2
             reasoning = 6.8
             assessment = "SATISFACTORY"
-            strengths = ["Identified the core concept and communicated clearly."]
+            strengths = ["Identified the core concept and communicated technical reasoning clearly."]
             weaknesses = ["Could provide more concrete architecture details and edge cases."]
             missing = ["Detailed explanation of error handling and concurrency trade-offs."]
             follow_up = "Good high-level response. Next question should challenge with an edge case."
+        # 6. Strong / Comprehensive Answers (55+ words, structured)
         else:
-            relevance = 8.5
-            correctness = 8.2
-            depth = 8.0
-            communication = 8.4
-            reasoning = 8.2
+            relevance = 8.6
+            correctness = 8.4
+            depth = 8.2
+            communication = 8.5
+            reasoning = 8.3
             assessment = "STRONG"
             strengths = [
                 "Comprehensive explanation with structured technical reasoning.",

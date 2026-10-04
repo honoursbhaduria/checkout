@@ -1,4 +1,6 @@
-const API_BASE = "http://localhost:8000/api/v1";
+const API_BASE =
+  (import.meta.env.VITE_API_URL as string | undefined)?.replace(/\/$/, "") ||
+  "http://localhost:8000/api/v1";
 
 export interface User {
   id: string;
@@ -386,6 +388,15 @@ class ApiClient {
       throw new Error(json.error?.message || "Failed to transcribe audio");
     }
     return json.data?.transcript || "";
+  }
+
+  async synthesizeSpeech(text: string): Promise<{ audio_base64?: string; mime_type?: string; mode: string }> {
+    const clean = (text || "").trim();
+    if (!clean) return { mode: "client_speech_synthesis" };
+    return this.request<{ audio_base64?: string; mime_type?: string; mode: string }>("/voice/synthesize", {
+      method: "POST",
+      body: JSON.stringify({ text: clean.slice(0, 800) }),
+    });
   }
 }
 

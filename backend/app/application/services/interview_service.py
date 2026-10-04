@@ -130,6 +130,69 @@ class InterviewService:
 
         return self._to_question_response(question, state)
 
+    async def _evaluate_answer_intelligently(
+        self,
+        question_text: str,
+        answer_text: str,
+        difficulty: int
+    ) -> Dict[str, Any]:
+        gemini = ai_router._gemini
+        if gemini:
+            try:
+                import json
+                import asyncio
+                prompt = (
+                    f"Question: {question_text}\n"
+                    f"Candidate Answer: {answer_text}\n\n"
+                    "Evaluate this answer strictly and objectively as a senior technical interviewer. "
+                    "If the candidate's answer indicates they do not know ('I don't know', 'idk', etc.), "
+                    "gives random gibberish, is completely off-topic, or is fundamentally incorrect, "
+                    "the overall_score MUST be between 0.0 and 1.5 out of 10. Do NOT give polite charity points. "
+                    "Return ONLY valid JSON matching this schema:\n"
+                    "{\n"
+                    '  "overall_score": float (0.0 to 10.0),\n'
+                    '  "relevance_score": float (0.0 to 10.0),\n'
+                    '  "correctness_score": float (0.0 to 10.0),\n'
+                    '  "depth_score": float (0.0 to 10.0),\n'
+                    '  "communication_score": float (0.0 to 10.0),\n'
+                    '  "reasoning_score": float (0.0 to 10.0),\n'
+                    '  "assessment": string,\n'
+                    '  "strengths": list of strings,\n'
+                    '  "weaknesses": list of strings,\n'
+                    '  "missing_points": list of strings,\n'
+                    '  "follow_up_reason": string\n'
+                    "}"
+                )
+                raw = await asyncio.wait_for(
+                    gemini.generate_text(
+                        prompt,
+                        system_prompt="You are an expert technical interviewer evaluator. Score strictly, objectively, and accurately."
+                    ),
+                    timeout=5.0
+                )
+                cleaned = raw.strip()
+                if cleaned.startswith("```"):
+                    lines = cleaned.split("\n")
+                    cleaned = "\n".join(lines[1:-1] if lines[-1].startswith("```") else lines[1:])
+                parsed = json.loads(cleaned)
+                if "overall_score" in parsed and isinstance(parsed.get("strengths"), list):
+                    parsed["overall_score"] = round(max(0.0, min(10.0, float(parsed["overall_score"]))), 1)
+                    parsed["relevance_score"] = round(max(0.0, min(10.0, float(parsed.get("relevance_score", parsed["overall_score"])))), 1)
+                    parsed["correctness_score"] = round(max(0.0, min(10.0, float(parsed.get("correctness_score", parsed["overall_score"])))), 1)
+                    parsed["depth_score"] = round(max(0.0, min(10.0, float(parsed.get("depth_score", parsed["overall_score"])))), 1)
+                    parsed["communication_score"] = round(max(0.0, min(10.0, float(parsed.get("communication_score", parsed["overall_score"])))), 1)
+                    parsed["reasoning_score"] = round(max(0.0, min(10.0, float(parsed.get("reasoning_score", parsed["overall_score"])))), 1)
+                    return parsed
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Gemini live evaluation error ({e}); using deterministic NLP evaluator.")
+
+        return self.ai.evaluate_answer(
+            question_text=question_text,
+            answer_text=answer_text,
+            difficulty=difficulty
+        )
+
     async def submit_answer(self, user_id: UUID, interview_id: UUID, data: AnswerSubmitRequest) -> AnswerEvaluationResponse:
         interview = await self._get_interview_entity(user_id, interview_id)
         state = interview.state
@@ -161,7 +224,7 @@ class InterviewService:
         await self.db.flush()
 
         # Evaluate Answer
-        eval_data = self.ai.evaluate_answer(
+        eval_data = await self._evaluate_answer_intelligently(
             question_text=question.question_text,
             answer_text=data.transcript,
             difficulty=question.difficulty
@@ -363,7 +426,7 @@ class InterviewService:
             is_good: Optional[bool] = None
             if score is not None:
                 scores.append(score)
-                if score >= 70 or readiness in ["STRONG_CANDIDATE", "INTERVIEW_READY"]:
+                if answered_count > 0 and score >= 70.0 and readiness in ["STRONG_CANDIDATE", "INTERVIEW_READY"]:
                     is_good = True
                     good_count += 1
                 else:

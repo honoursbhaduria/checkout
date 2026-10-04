@@ -145,6 +145,24 @@ export function App() {
   const isTranscribingSliceRef = useRef<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
+  // Smooth live-transcription display: mic results stream into `candidateAnswer`
+  // (target) while `displayedAnswer` eases toward it typewriter-style so text
+  // flows in smoothly instead of jumping in chunks.
+  const [displayedAnswer, setDisplayedAnswer] = useState<string>(saved?.candidateAnswer || "");
+  const micStreamingRef = useRef<boolean>(false);
+  const userTypingRef = useRef<boolean>(false);
+  const displayTimerRef = useRef<any>(null);
+
+  const snapAnswerDisplay = (text: string) => {
+    micStreamingRef.current = false;
+    if (displayTimerRef.current) {
+      clearInterval(displayTimerRef.current);
+      displayTimerRef.current = null;
+    }
+    setCandidateAnswer(text);
+    setDisplayedAnswer(text);
+  };
+
   // Report state
   const [report, setReport] = useState<ReportData | null>(saved?.report || null);
   const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(saved?.prepPlan || null);
@@ -230,6 +248,7 @@ export function App() {
       setInterviewId(null);
       setCurrentQuestion(null);
       setCandidateAnswer("");
+      setDisplayedAnswer("");
       setLatestEvaluation(null);
       setReport(null);
       setPrepPlan(null);
@@ -297,46 +316,226 @@ export function App() {
     } catch {}
   };
 
-  // Text-To-Speech for questions
-  const speakText = (text: string) => {
-    if (!ttsEnabled) return;
+  // Text-To-Speech for questions — server neural voice first, robust browser fallback
+  const serverAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsResumeTimerRef = useRef<any>(null);
 
-    // Play subtle audible AI audio tone
-    playAIChime();
-
-    if (!("speechSynthesis" in window)) return;
+  const stopSpeaking = () => {
     try {
-      if (window.speechSynthesis.paused) {
-        window.speechSynthesis.resume();
+      if (serverAudioRef.current) {
+        serverAudioRef.current.pause();
+        serverAudioRef.current.src = "";
+        serverAudioRef.current = null;
       }
-      window.speechSynthesis.cancel();
+    } catch {}
+    try {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    } catch {}
+    if (ttsResumeTimerRef.current) {
+      clearInterval(ttsResumeTimerRef.current);
+      ttsResumeTimerRef.current = null;
+    }
+    setIsSpeakingQuestion(false);
+  };
 
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 1.0;
-      utterance.lang = "en-US";
-
-      const voices = window.speechSynthesis.getVoices();
-      const englishVoice = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("David"))) || voices.find((v) => v.lang.startsWith("en"));
-      if (englishVoice) {
-        utterance.voice = englishVoice;
+  const loadBrowserVoices = (): Promise<SpeechSynthesisVoice[]> => {
+    return new Promise((resolve) => {
+      try {
+        const synth = window.speechSynthesis;
+        const existing = synth.getVoices();
+        if (existing && existing.length > 0) return resolve(existing);
+        let done = false;
+        const finish = (v: SpeechSynthesisVoice[]) => {
+          if (!done) {
+            done = true;
+            resolve(v);
+          }
+        };
+        (synth as any).onvoiceschanged = () => finish(synth.getVoices());
+        setTimeout(() => finish(synth.getVoices()), 1200);
+      } catch {
+        resolve([]);
       }
+    });
+  };
 
-      utterance.onstart = () => setIsSpeakingQuestion(true);
-      utterance.onend = () => setIsSpeakingQuestion(false);
-      utterance.onerror = () => setIsSpeakingQuestion(false);
+  const speakWithBrowser = async (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      setError("Browser voice not supported here. Server voice failed — check backend / GEMINI key.");
+      setIsSpeakingQuestion(false);
+      return;
+    }
+    const synth = window.speechSynthesis;
+    try {
+      synth.cancel();
+      // Chrome cancel() kills a speak() issued in the same tick — wait a beat
+      await new Promise((r) => setTimeout(r, 120));
+      if (synth.paused) {
+        try { synth.resume(); } catch {}
+      }
+      const voices = await loadBrowserVoices();
+      const englishVoice =
+        voices.find((v) => v.lang.toLowerCase().startsWith("en") && /google|natural|samantha|david|zira|aria/i.test(v.name)) ||
+        voices.find((v) => v.lang.toLowerCase().startsWith("en")) ||
+        voices[0];
 
-      window.speechSynthesis.speak(utterance);
+      // Chrome silently truncates long utterances (~15s) — chunk by sentences
+      const chunks: string[] = [];
+      const sentences = text.match(/[^.!?]+[.!?]+["']?|\S.+$/g) || [text];
+      let buf = "";
+      for (const s of sentences) {
+        const piece = s.trim();
+        if (!piece) continue;
+        if ((buf + " " + piece).trim().length > 180) {
+          if (buf) chunks.push(buf.trim());
+          buf = piece;
+        } else {
+          buf = (buf + " " + piece).trim();
+        }
+      }
+      if (buf.trim()) chunks.push(buf.trim());
+      const queue = chunks.length > 0 ? chunks : [text];
+
+      // Chrome pause bug: keep resuming while speaking
+      if (ttsResumeTimerRef.current) clearInterval(ttsResumeTimerRef.current);
+      ttsResumeTimerRef.current = setInterval(() => {
+        try {
+          if (synth.paused && synth.speaking) synth.resume();
+        } catch {}
+      }, 500);
+
+      let idx = 0;
+      const speakNext = () => {
+        if (idx >= queue.length) {
+          if (ttsResumeTimerRef.current) {
+            clearInterval(ttsResumeTimerRef.current);
+            ttsResumeTimerRef.current = null;
+          }
+          setIsSpeakingQuestion(false);
+          return;
+        }
+        const u = new SpeechSynthesisUtterance(queue[idx]);
+        u.rate = 1.0;
+        u.pitch = 1.0;
+        u.lang = "en-US";
+        if (englishVoice) u.voice = englishVoice;
+        u.onend = () => {
+          idx++;
+          speakNext();
+        };
+        u.onerror = () => {
+          if (ttsResumeTimerRef.current) {
+            clearInterval(ttsResumeTimerRef.current);
+            ttsResumeTimerRef.current = null;
+          }
+          setIsSpeakingQuestion(false);
+        };
+        setIsSpeakingQuestion(true);
+        synth.speak(u);
+      };
+      speakNext();
     } catch (e) {
       console.warn("TTS playback error:", e);
       setIsSpeakingQuestion(false);
     }
   };
 
+  const speakText = async (text: string) => {
+    if (!ttsEnabled) return;
+    const clean = (text || "").trim();
+    if (!clean) return;
+
+    // Toggle: clicking while speaking stops playback
+    if (isSpeakingQuestion) {
+      stopSpeaking();
+      return;
+    }
+    stopSpeaking();
+    playAIChime();
+    setIsSpeakingQuestion(true);
+    setError(null);
+
+    // 1. Prefer server neural voice (works with zero OS voices on Linux)
+    try {
+      const res = await api.synthesizeSpeech(clean);
+      if (res && res.audio_base64) {
+        const mime = res.mime_type || "audio/wav";
+        const bytes = Uint8Array.from(atob(res.audio_base64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        serverAudioRef.current = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          serverAudioRef.current = null;
+          setIsSpeakingQuestion(false);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          serverAudioRef.current = null;
+          speakWithBrowser(clean);
+        };
+        await audio.play();
+        return;
+      }
+    } catch (e) {
+      console.warn("Server TTS unavailable, using browser voice:", e);
+    }
+
+    // 2. Browser fallback
+    await speakWithBrowser(clean);
+  };
+
+  // Warm up browser voices early so first click speaks instantly
+  useEffect(() => {
+    loadBrowserVoices().catch(() => {});
+  }, []);
+
+  // Typewriter easing: displayed text glides toward the mic target smoothly
+  useEffect(() => {
+    if (userTypingRef.current) {
+      userTypingRef.current = false;
+      setDisplayedAnswer(candidateAnswer);
+      return;
+    }
+    if (!micStreamingRef.current) {
+      setDisplayedAnswer(candidateAnswer);
+      return;
+    }
+    if (displayTimerRef.current) clearInterval(displayTimerRef.current);
+    displayTimerRef.current = setInterval(() => {
+      setDisplayedAnswer((prev) => {
+        if (prev === candidateAnswer) {
+          if (displayTimerRef.current) {
+            clearInterval(displayTimerRef.current);
+            displayTimerRef.current = null;
+          }
+          return prev;
+        }
+        let i = 0;
+        while (i < prev.length && i < candidateAnswer.length && prev[i] === candidateAnswer[i]) i++;
+        if (candidateAnswer.length >= prev.length) {
+          // extend smoothly, ~2 chars per tick
+          return candidateAnswer.slice(0, Math.min(candidateAnswer.length, Math.max(i, prev.length + 2)));
+        }
+        // shrink smoothly on re-transcription regression
+        return candidateAnswer.slice(0, Math.max(i, prev.length - 6));
+      });
+    }, 30);
+    return () => {
+      if (displayTimerRef.current) {
+        clearInterval(displayTimerRef.current);
+        displayTimerRef.current = null;
+      }
+    };
+  }, [candidateAnswer]);
+
   // Start Mic listening with real hardware recording and faster-whisper backend STT
   const startMicListening = async () => {
     setError(null);
     setCandidateAnswer("");
+    setDisplayedAnswer("");
+    micStreamingRef.current = true;
 
     // 1. Request real hardware microphone access and begin MediaRecorder capture
     let stream: MediaStream | null = null;
@@ -376,8 +575,14 @@ export function App() {
               try {
                 isTranscribingSliceRef.current = true;
                 const partial = await api.transcribeAudioFile(currentBlob);
-                if (partial && partial.trim()) {
-                  setCandidateAnswer(partial.trim());
+                const cleanPartial = (partial || "").trim();
+                if (cleanPartial) {
+                  // Ignore tiny re-transcription flicker so text only flows forward
+                  setCandidateAnswer((prev) => {
+                    if (cleanPartial === prev) return prev;
+                    if (prev.startsWith(cleanPartial) && prev.length - cleanPartial.length < 12) return prev;
+                    return cleanPartial;
+                  });
                 }
               } catch (e) {
                 console.warn("Live slice STT error:", e);
@@ -403,9 +608,8 @@ export function App() {
       return;
     }
 
-    if (isSpeakingQuestion && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeakingQuestion(false);
+    if (isSpeakingQuestion) {
+      stopSpeaking();
     }
 
     // 2. Start Web Speech recognition if supported for real-time live typing
@@ -433,7 +637,11 @@ export function App() {
           }
           const clean = fullTranscript.trim();
           if (clean) {
-            setCandidateAnswer(clean);
+            setCandidateAnswer((prev) => {
+              if (clean === prev) return prev;
+              if (prev.startsWith(clean) && prev.length - clean.length < 12) return prev;
+              return clean;
+            });
           }
         };
 
@@ -452,6 +660,7 @@ export function App() {
   };
 
   const stopMicListening = () => {
+    micStreamingRef.current = false;
     if (liveIntervalRef.current) {
       clearInterval(liveIntervalRef.current);
       liveIntervalRef.current = null;
@@ -470,7 +679,8 @@ export function App() {
             setIsTranscribing(true);
             const transcript = await api.transcribeAudioFile(audioBlob);
             if (transcript && transcript.trim()) {
-              setCandidateAnswer(transcript.trim());
+              // Final result snaps in whole — what you see is what gets submitted
+              snapAnswerDisplay(transcript.trim());
             }
           } catch (e: any) {
             console.warn("Backend STT error:", e);
@@ -521,7 +731,7 @@ export function App() {
     } else {
       sample = "In my previous engineering projects, I focused on high-concurrency architecture, robust error handling, automated testing with pytest, and maintaining 99.9% uptime across production Docker containers.";
     }
-    setCandidateAnswer(sample);
+    snapAnswerDisplay(sample);
   };
 
   // Step 1 -> Process Job and Resume
@@ -572,6 +782,7 @@ export function App() {
       setCurrentQuestion(firstQ);
       setLatestEvaluation(null);
       setCandidateAnswer("");
+      setDisplayedAnswer("");
       setActiveTab("interview");
       speakText(firstQ.question.text);
     } catch (err: any) {
@@ -584,6 +795,10 @@ export function App() {
   // Submit Answer
   const handleSubmitAnswer = async () => {
     if (!interviewId || !currentQuestion || !candidateAnswer.trim()) return;
+
+    // Freeze streaming display so submitted text matches what is on screen
+    micStreamingRef.current = false;
+    setDisplayedAnswer(candidateAnswer);
 
     if (isListeningMic && recognitionRef.current) {
       recognitionRef.current.stop();
@@ -610,6 +825,7 @@ export function App() {
         setTimeout(() => {
           setCurrentQuestion(updatedQ);
           setCandidateAnswer("");
+      setDisplayedAnswer("");
           speakText(updatedQ.question.text);
         }, 1800);
       } else {
@@ -654,26 +870,26 @@ export function App() {
     <div className="min-h-screen pb-16">
       {/* Top Header */}
       <header className="border-b-[3px] border-pencil bg-white/90 backdrop-blur-sm sticky top-0 z-30 shadow-sketchSm">
-        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
-          <div className="flex items-center gap-2.5 sm:gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3 shrink-0">
             <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-wobbly bg-marker border-2 border-pencil flex items-center justify-center text-white font-heading text-xl sm:text-2xl font-bold shadow-sketchSm shrink-0">
               CK
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h1 className="font-heading text-2xl sm:text-3xl md:text-4xl font-bold text-pencil leading-none">
+                <h1 className="font-heading text-2xl sm:text-3xl md:text-4xl font-bold text-pencil leading-none whitespace-nowrap">
                   Checkout
                 </h1>
               </div>
-              <p className="font-body text-xs sm:text-base text-pencil/70">
+              <p className="font-body text-xs sm:text-sm text-pencil/70 leading-tight whitespace-nowrap overflow-hidden text-ellipsis">
                 Personalized Interview Simulator by Student Credibility
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto no-scrollbar">
+          <div className="flex items-center gap-2 w-full xl:w-auto min-w-0 flex-1 xl:flex-none justify-start xl:justify-end">
             {/* Navigation Tabs */}
-            <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+            <nav className="flex items-center justify-start gap-1.5 sm:gap-2 overflow-x-auto min-w-0 flex-1 xl:flex-none py-1 no-scrollbar [&>button]:shrink-0 [&>button]:flex-none">
               <button
                 onClick={() => setActiveTab("ingest")}
                 className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
@@ -743,7 +959,7 @@ export function App() {
               type="button"
               onClick={handleResetSession}
               title="Start a new interview session"
-              className="font-body text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil/40 bg-white hover:bg-marker hover:text-white hover:border-pencil transition-all text-pencil flex items-center gap-1 cursor-pointer shrink-0 ml-1 shadow-sketchSm"
+              className="font-body text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil/40 bg-white hover:bg-marker hover:text-white hover:border-pencil transition-all text-pencil flex items-center gap-1 cursor-pointer shrink-0 flex-none ml-1 shadow-sketchSm"
             >
               <RotateCcw className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">New Session</span>
@@ -1341,9 +1557,9 @@ export function App() {
                     <button
                       onClick={() => speakText(currentQuestion.question.text)}
                       className="text-xs sm:text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-2.5 sm:px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
-                      title="Play question audio with AI voice and chime"
+                      title={isSpeakingQuestion ? "Stop AI voice playback" : "Play question audio with AI voice"}
                     >
-                      <Volume2 className="w-4 h-4 text-marker group-hover:text-white" /> Listen to AI Voice
+                      <Volume2 className={`w-4 h-4 ${isSpeakingQuestion ? "animate-pulse text-marker" : "text-marker group-hover:text-white"}`} /> {isSpeakingQuestion ? "Stop Voice" : "Listen to AI Voice"}
                     </button>
                   </div>
                 </SpeechBubble>
@@ -1397,8 +1613,12 @@ export function App() {
 
                   <HandDrawnTextarea
                     rows={6}
-                    value={candidateAnswer}
-                    onChange={(e) => setCandidateAnswer(e.target.value)}
+                    value={displayedAnswer}
+                    onChange={(e) => {
+                      userTypingRef.current = true;
+                      micStreamingRef.current = false;
+                      setCandidateAnswer(e.target.value);
+                    }}
                     placeholder="Click 'Speak via Microphone' to answer aloud, or use 'Quick Voice Sample', or type your answer here..."
                   />
 

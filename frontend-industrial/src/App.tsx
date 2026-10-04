@@ -266,30 +266,169 @@ export function App() {
     }
   };
 
-  const speakText = (text: string) => {
-    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+  const serverAudioRef = useRef<HTMLAudioElement | null>(null);
+  const ttsResumeTimerRef = useRef<any>(null);
+
+  const stopSpeaking = () => {
     try {
-      window.speechSynthesis.cancel();
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 1.0;
-      utterance.pitch = 0.95;
-      utterance.lang = "en-US";
-
-      const voices = window.speechSynthesis.getVoices();
-      const voice = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("David"))) || voices.find((v) => v.lang.startsWith("en"));
-      if (voice) {
-        utterance.voice = voice;
+      if (serverAudioRef.current) {
+        serverAudioRef.current.pause();
+        serverAudioRef.current.src = "";
+        serverAudioRef.current = null;
       }
+    } catch {}
+    try {
+      if ("speechSynthesis" in window) window.speechSynthesis.cancel();
+    } catch {}
+    if (ttsResumeTimerRef.current) {
+      clearInterval(ttsResumeTimerRef.current);
+      ttsResumeTimerRef.current = null;
+    }
+    setIsSpeakingQuestion(false);
+  };
 
-      utterance.onstart = () => setIsSpeakingQuestion(true);
-      utterance.onend = () => setIsSpeakingQuestion(false);
-      utterance.onerror = () => setIsSpeakingQuestion(false);
-      window.speechSynthesis.speak(utterance);
+  const loadBrowserVoices = (): Promise<SpeechSynthesisVoice[]> => {
+    return new Promise((resolve) => {
+      try {
+        const synth = window.speechSynthesis;
+        const existing = synth.getVoices();
+        if (existing && existing.length > 0) return resolve(existing);
+        let done = false;
+        const finish = (v: SpeechSynthesisVoice[]) => {
+          if (!done) {
+            done = true;
+            resolve(v);
+          }
+        };
+        (synth as any).onvoiceschanged = () => finish(synth.getVoices());
+        setTimeout(() => finish(synth.getVoices()), 1200);
+      } catch {
+        resolve([]);
+      }
+    });
+  };
+
+  const speakWithBrowser = async (text: string) => {
+    if (!("speechSynthesis" in window)) {
+      setError("Browser voice not supported here. Server voice failed — check backend / GEMINI key.");
+      setIsSpeakingQuestion(false);
+      return;
+    }
+    const synth = window.speechSynthesis;
+    try {
+      synth.cancel();
+      await new Promise((r) => setTimeout(r, 120));
+      if (synth.paused) {
+        try { synth.resume(); } catch {}
+      }
+      const voices = await loadBrowserVoices();
+      const voice =
+        voices.find((v) => v.lang.toLowerCase().startsWith("en") && /google|natural|samantha|david|zira|aria/i.test(v.name)) ||
+        voices.find((v) => v.lang.toLowerCase().startsWith("en")) ||
+        voices[0];
+
+      const chunks: string[] = [];
+      const sentences = text.match(/[^.!?]+[.!?]+["']?|\S.+$/g) || [text];
+      let buf = "";
+      for (const s of sentences) {
+        const piece = s.trim();
+        if (!piece) continue;
+        if ((buf + " " + piece).trim().length > 180) {
+          if (buf) chunks.push(buf.trim());
+          buf = piece;
+        } else {
+          buf = (buf + " " + piece).trim();
+        }
+      }
+      if (buf.trim()) chunks.push(buf.trim());
+      const queue = chunks.length > 0 ? chunks : [text];
+
+      if (ttsResumeTimerRef.current) clearInterval(ttsResumeTimerRef.current);
+      ttsResumeTimerRef.current = setInterval(() => {
+        try {
+          if (synth.paused && synth.speaking) synth.resume();
+        } catch {}
+      }, 500);
+
+      let idx = 0;
+      const speakNext = () => {
+        if (idx >= queue.length) {
+          if (ttsResumeTimerRef.current) {
+            clearInterval(ttsResumeTimerRef.current);
+            ttsResumeTimerRef.current = null;
+          }
+          setIsSpeakingQuestion(false);
+          return;
+        }
+        const u = new SpeechSynthesisUtterance(queue[idx]);
+        u.rate = 1.0;
+        u.pitch = 0.95;
+        u.lang = "en-US";
+        if (voice) u.voice = voice;
+        u.onend = () => {
+          idx++;
+          speakNext();
+        };
+        u.onerror = () => {
+          if (ttsResumeTimerRef.current) {
+            clearInterval(ttsResumeTimerRef.current);
+            ttsResumeTimerRef.current = null;
+          }
+          setIsSpeakingQuestion(false);
+        };
+        setIsSpeakingQuestion(true);
+        synth.speak(u);
+      };
+      speakNext();
     } catch (e) {
       console.warn("TTS playback error:", e);
       setIsSpeakingQuestion(false);
     }
   };
+
+  const speakText = async (text: string) => {
+    if (!ttsEnabled) return;
+    const clean = (text || "").trim();
+    if (!clean) return;
+    if (isSpeakingQuestion) {
+      stopSpeaking();
+      return;
+    }
+    stopSpeaking();
+    setIsSpeakingQuestion(true);
+    setError(null);
+    try {
+      const res = await api.synthesizeSpeech(clean);
+      if (res && res.audio_base64) {
+        const mime = res.mime_type || "audio/wav";
+        const bytes = Uint8Array.from(atob(res.audio_base64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: mime });
+        const url = URL.createObjectURL(blob);
+        const audio = new Audio(url);
+        serverAudioRef.current = audio;
+        audio.onended = () => {
+          URL.revokeObjectURL(url);
+          serverAudioRef.current = null;
+          setIsSpeakingQuestion(false);
+        };
+        audio.onerror = () => {
+          URL.revokeObjectURL(url);
+          serverAudioRef.current = null;
+          speakWithBrowser(clean);
+        };
+        await audio.play();
+        return;
+      }
+    } catch (e) {
+      console.warn("Server TTS unavailable, using browser voice:", e);
+    }
+    await speakWithBrowser(clean);
+  };
+
+  // Warm up browser voices early so first click speaks instantly
+  useEffect(() => {
+    loadBrowserVoices().catch(() => {});
+  }, []);
 
   const startMicListening = async () => {
     setError(null);
@@ -359,9 +498,8 @@ export function App() {
       return;
     }
 
-    if (isSpeakingQuestion && "speechSynthesis" in window) {
-      window.speechSynthesis.cancel();
-      setIsSpeakingQuestion(false);
+    if (isSpeakingQuestion) {
+      stopSpeaking();
     }
 
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
@@ -600,8 +738,8 @@ export function App() {
     <div className="min-h-screen bg-chassis text-ink pb-20">
       {/* Top Industrial Chassis Bar */}
       <header className="bg-chassis border-b border-[#a3b1c6]/40 shadow-card sticky top-0 z-30">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-4 flex flex-col xl:flex-row items-stretch xl:items-center justify-between gap-4">
+          <div className="flex items-center gap-4 shrink-0">
             <div className="w-12 h-12 rounded-lg bg-[#2d3436] shadow-sharp flex items-center justify-center border border-white/20">
               <Cpu className="w-6 h-6 text-safety" />
             </div>
@@ -628,8 +766,8 @@ export function App() {
           </div>
 
           {/* Stage Buttons */}
-          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
-            <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+          <div className="flex items-center gap-2 w-full xl:w-auto min-w-0 flex-1 xl:flex-none justify-start xl:justify-end">
+            <nav className="flex items-center justify-start gap-1.5 sm:gap-2 overflow-x-auto min-w-0 flex-1 xl:flex-none py-1 no-scrollbar [&>button]:shrink-0 [&>button]:flex-none">
               <button
                 onClick={() => setActiveTab("ingest")}
                 className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer ${

@@ -202,9 +202,13 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({ onStreamActive }) => {
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative w-full max-w-[280px] h-[190px] bg-[#f0ede6] border-2 border-pencil rounded-xl md:rounded-wobblyMd overflow-hidden shadow-sketchSm flex items-center justify-center">
+      {/* Rectangular taped frame — no wobbly curves */}
+      <div className="relative w-full max-w-[320px] mt-4">
+        {/* Tape strip pinned on top edge */}
+        <div className="absolute -top-3 left-1/2 -translate-x-1/2 rotate-[-2deg] w-28 h-7 bg-[#e9d8a6]/95 border border-black/10 shadow-[0_1px_2px_rgba(0,0,0,0.15)] z-10 pointer-events-none" />
+        <div className="relative w-full h-[210px] bg-[#f0ede6] border-[3px] border-pencil rounded-[6px] overflow-hidden shadow-sketchSm flex items-center justify-center">
         {/* Hidden canvas for video generation */}
-        <canvas ref={canvasRef} width={280} height={190} className="hidden" />
+        <canvas ref={canvasRef} width={320} height={210} className="hidden" />
 
         {/* Video element ALWAYS mounted to avoid null ref lifecycle race */}
         <video
@@ -237,18 +241,19 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({ onStreamActive }) => {
 
         {/* Live indicator badge */}
         {isActive && (
-          <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-marker text-white px-2 py-0.5 rounded-full text-xs font-heading font-bold border border-pencil shadow-sm">
-            <span className="w-2 h-2 rounded-full bg-white animate-ping" />
+          <div className="absolute top-2 right-2 flex items-center gap-1.5 bg-marker text-white px-2 py-0.5 rounded-[4px] text-xs font-heading font-bold border-2 border-pencil shadow-sm">
+            <span className="w-2 h-2 bg-white animate-ping" />
             {feedMode === "live" ? "LIVE REC" : "SIM REC"}
           </div>
         )}
 
         {/* Feed mode pill */}
         {isActive && (
-          <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border border-pencil px-2 py-0.5 rounded text-[11px] font-heading text-pencil">
+          <div className="absolute bottom-2 left-2 bg-white/90 backdrop-blur-sm border-2 border-pencil px-2 py-0.5 rounded-[4px] text-[11px] font-heading text-pencil">
             {feedMode === "live" ? "📹 HD Webcam" : "✨ AI Simulated Feed"}
           </div>
         )}
+        </div>
       </div>
 
       {/* Control Buttons */}

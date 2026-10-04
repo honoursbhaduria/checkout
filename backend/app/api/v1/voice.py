@@ -49,7 +49,71 @@ async def transcribe_audio_file(file: UploadFile = File(...)):
 
 @router.post("/synthesize")
 async def synthesize_text_rest(data: SynthesizeRequest):
-    return APIResponse(data={"status": "ready", "text": data.text, "mode": "client_speech_synthesis"})
+    """Server-side neural TTS via Gemini (works even when OS has no local voices).
+    Falls back to client speechSynthesis mode when unavailable."""
+    import httpx
+    from app.core.config import settings
+
+    text = (data.text or "").strip()
+    if not text:
+        return APIResponse(data={"status": "ready", "mode": "client_speech_synthesis"})
+    # Cap length to keep TTS fast
+    if len(text) > 800:
+        text = text[:800]
+
+    api_key = getattr(settings, "GEMINI_API_KEY", None)
+    if api_key:
+        try:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": f"Say naturally, at a steady interview pace: {text}"}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "Kore"}}},
+                },
+            }
+            async with httpx.AsyncClient(timeout=25.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    body = resp.json()
+                    for cand in body.get("candidates", []):
+                        for part in cand.get("content", {}).get("parts", []):
+                            inline = part.get("inlineData") or {}
+                            b64 = inline.get("data")
+                            if b64:
+                                import base64 as _b64
+                                import struct as _struct
+                                raw = _b64.b64decode(b64)
+                                mime = inline.get("mimeType", "audio/wav")
+                                # Gemini returns raw PCM S16LE mono 24kHz (no container).
+                                # Browsers can't play headerless PCM — wrap in WAV.
+                                if raw[:4] != b"RIFF":
+                                    rate = 24000
+                                    m = mime.lower()
+                                    if "rate=16000" in m or "16000" in m:
+                                        rate = 16000
+                                    n = len(raw)
+                                    header = _struct.pack(
+                                        "<4sI4s4sIHHIIHH4sI",
+                                        b"RIFF", 36 + n, b"WAVE",
+                                        b"fmt ", 16, 1, 1, rate,
+                                        rate * 2, 2, 16,
+                                        b"data", n,
+                                    )
+                                    raw = header + raw
+                                    mime = "audio/wav"
+                                return APIResponse(data={
+                                    "status": "ready",
+                                    "mode": "server_tts",
+                                    "audio_base64": _b64.b64encode(raw).decode("utf-8"),
+                                    "mime_type": mime,
+                                })
+                else:
+                    logger.warning(f"Gemini TTS HTTP {resp.status_code}: {resp.text[:200]}")
+        except Exception as e:
+            logger.warning(f"Gemini TTS fallback warning: {e}")
+
+    return APIResponse(data={"status": "ready", "text": text, "mode": "client_speech_synthesis"})
 
 
 @router.websocket("/sessions/{session_id}/stream")

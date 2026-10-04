@@ -59,37 +59,61 @@ class ReportService:
                     )
                 })
 
-        avg_score = sum(e.overall_score for e in evals) / max(len(evals), 1) * 10
-        avg_score = round(avg_score, 1) if evals else 76.0
-
-        # Competency aggregation
-        role_fit = min(95.0, avg_score + 4.0)
-        technical_knowledge = round(sum(e.depth_score for e in evals) / max(len(evals), 1) * 10, 1) if evals else 74.0
-        problem_solving = round(sum(e.reasoning_score for e in evals) / max(len(evals), 1) * 10, 1) if evals else 78.0
-        communication = round(sum(e.communication_score for e in evals) / max(len(evals), 1) * 10, 1) if evals else 80.0
-        confidence = 75.0
-        depth = technical_knowledge
-        behavioral_fit = 85.0
-
-        # Algorithmic readiness threshold
-        if avg_score >= 85.0:
-            classification = "STRONG_CANDIDATE"
-        elif avg_score >= 75.0:
-            classification = "INTERVIEW_READY"
-        elif avg_score >= 60.0:
-            classification = "NEEDS_PREPARATION"
-        else:
+        if not evals:
+            avg_score = 0.0
+            role_fit = 0.0
+            technical_knowledge = 0.0
+            problem_solving = 0.0
+            communication = 0.0
+            confidence = 0.0
+            depth = 0.0
+            behavioral_fit = 0.0
             classification = "NOT_READY"
+            strengths = ["Interview session was initialized."]
+            weaknesses = [
+                "0 out of 9 interview questions were answered.",
+                "Candidate did not submit any responses during the interview session.",
+                "Readiness cannot be assessed without candidate response data."
+            ]
+        else:
+            avg_score = round(sum(e.overall_score for e in evals) / len(evals) * 10, 1)
 
-        strengths = [
-            "Demonstrated clear communication and solid technical foundations.",
-            "Articulated previous practical project experience effectively.",
-            "Strong problem-solving approach when decomposing high-level requirements."
-        ]
-        weaknesses = [
-            "Could elaborate further on error handling, failover mechanisms, and concurrency edge cases.",
-            "Include more quantitative metrics when validating performance improvements."
-        ]
+            # Competency aggregation directly derived from candidate's answers
+            role_fit = min(100.0, round(avg_score + 2.0, 1))
+            technical_knowledge = round(sum(e.depth_score for e in evals) / len(evals) * 10, 1)
+            problem_solving = round(sum(e.reasoning_score for e in evals) / len(evals) * 10, 1)
+            communication = round(sum(e.communication_score for e in evals) / len(evals) * 10, 1)
+            confidence = round(min(100.0, communication * 0.95), 1)
+            depth = technical_knowledge
+            behavioral_fit = round(min(100.0, avg_score * 1.05), 1)
+
+            # Algorithmic readiness threshold
+            if avg_score >= 85.0:
+                classification = "STRONG_CANDIDATE"
+            elif avg_score >= 70.0:
+                classification = "INTERVIEW_READY"
+            elif avg_score >= 50.0:
+                classification = "NEEDS_PREPARATION"
+            else:
+                classification = "NOT_READY"
+
+            # Aggregate real strengths and weaknesses from actual evaluations
+            real_strengths = []
+            real_weaknesses = []
+            for e in evals:
+                if e.strengths:
+                    real_strengths.extend(e.strengths)
+                if e.weaknesses:
+                    real_weaknesses.extend(e.weaknesses)
+
+            strengths = list(dict.fromkeys(real_strengths))[:3] if real_strengths else [
+                "Engaged with interview questions.",
+                "Demonstrated baseline technical comprehension."
+            ]
+            weaknesses = list(dict.fromkeys(real_weaknesses))[:3] if real_weaknesses else [
+                "Include more quantitative metrics when validating performance improvements.",
+                "Elaborate on error handling, failover mechanisms, and concurrency edge cases."
+            ]
 
         report = InterviewReport(
             interview_id=interview.id,
@@ -119,12 +143,15 @@ class ReportService:
         if existing:
             return self._to_plan_response(existing)
 
-        # Check job fit gaps if available
-        int_stmt = select(Interview).where(Interview.id == interview_id, Interview.user_id == user_id)
+        int_stmt = select(Interview).options(
+            selectinload(Interview.questions).selectinload(InterviewQuestion.answer)
+        ).where(Interview.id == interview_id, Interview.user_id == user_id)
         int_res = await self.db.execute(int_stmt)
         interview = int_res.scalar_one_or_none()
         if not interview:
             raise ResourceNotFoundError("Interview", str(interview_id))
+
+        has_answers = any(q.answer is not None for q in (interview.questions or []))
 
         fit_stmt = select(JobFitResult).where(
             JobFitResult.job_id == interview.job_id,
@@ -133,7 +160,24 @@ class ReportService:
         fit_res = await self.db.execute(fit_stmt)
         fit = fit_res.scalar_one_or_none()
 
-        items = [
+        if not has_answers:
+            items = [
+                {
+                    "topic": "Complete Practice Interview Simulation",
+                    "priority": "high",
+                    "reason": "Zero interview answers were submitted. Readiness and competency gaps cannot be measured without candidate participation.",
+                    "current_level": 0,
+                    "target_level": 70,
+                    "estimated_minutes": 30,
+                    "action_items": [
+                        "Launch the Voice Interview Simulator from Tab 4",
+                        "Answer technical screening, competency, and deep-dive questions",
+                        "Review individual answer critiques and scores upon completion"
+                    ]
+                }
+            ]
+        else:
+            items = [
             {
                 "topic": "System Design & Distributed Invalidation",
                 "priority": "high",
