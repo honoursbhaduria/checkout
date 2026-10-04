@@ -59,6 +59,24 @@ class JobService:
         await self.db.commit()
         await self.db.refresh(analysis)
 
+        # Index required skills into Qdrant Vector Store
+        try:
+            from app.infrastructure.vector_store.qdrant_client import qdrant_store
+            from app.ai.embeddings.local_embeddings import local_embeddings
+            points = []
+            for idx, skill in enumerate(analysis.required_skills):
+                point_id = int(hashlib.md5(f"{job.id}_{skill}".encode()).hexdigest()[:8], 16)
+                vec = local_embeddings.embed_text(skill)
+                points.append({
+                    "id": point_id,
+                    "vector": vec,
+                    "payload": {"job_id": str(job.id), "skill": skill, "role": job.title}
+                })
+            if points:
+                qdrant_store.upsert_vectors("job_skills", points)
+        except Exception as e:
+            pass
+
         return self._to_response(job, analysis)
 
     async def get_job(self, user_id: UUID, job_id: UUID) -> JobResponse:

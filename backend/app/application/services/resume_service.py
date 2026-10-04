@@ -62,6 +62,31 @@ class ResumeService:
             saved_claims.append(claim)
 
         await self.db.commit()
+
+        # Index verifiable claims into Qdrant Vector Store
+        try:
+            from app.infrastructure.vector_store.qdrant_client import qdrant_store
+            from app.ai.embeddings.local_embeddings import local_embeddings
+            points = []
+            for claim in saved_claims:
+                point_id = int(hashlib.md5(f"{claim.id}".encode()).hexdigest()[:8], 16)
+                vec = local_embeddings.embed_text(claim.claim_text)
+                points.append({
+                    "id": point_id,
+                    "vector": vec,
+                    "payload": {
+                        "resume_id": str(resume.id),
+                        "claim_id": str(claim.id),
+                        "candidate_name": resume.candidate_name,
+                        "claim_text": claim.claim_text,
+                        "category": claim.category
+                    }
+                })
+            if points:
+                qdrant_store.upsert_vectors("resume_claims", points)
+        except Exception as e:
+            pass
+
         return self._to_response(resume, saved_claims)
 
     async def get_resume(self, user_id: UUID, resume_id: UUID) -> ResumeResponse:

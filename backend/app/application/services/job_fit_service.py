@@ -57,6 +57,25 @@ class JobFitService:
 
         fit_result = self.ai.calculate_job_fit(jd_dict, resume_dict)
 
+        # Enrich matches with semantic vector search from Qdrant Cloud
+        try:
+            from app.infrastructure.vector_store.qdrant_client import qdrant_store
+            from app.ai.embeddings.local_embeddings import local_embeddings
+            for m in fit_result.get("matches", []):
+                skill = m.get("skill")
+                if skill:
+                    vec = local_embeddings.embed_text(skill)
+                    search_results = qdrant_store.search("resume_claims", query_vector=vec, limit=1)
+                    if search_results and search_results[0]["score"] > 0.5:
+                        top = search_results[0]
+                        claim_text = top["payload"].get("claim_text", "")
+                        if claim_text:
+                            m["resume_evidence"] = (
+                                f"{m['resume_evidence']} | Qdrant Vector Match ({top['score']:.2f}): \"{claim_text}\""
+                            )
+        except Exception:
+            pass
+
         record = JobFitResult(
             user_id=user_id,
             job_id=job.id,
