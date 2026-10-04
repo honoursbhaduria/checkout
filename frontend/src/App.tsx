@@ -1330,19 +1330,21 @@ export function App() {
                 {/* Video Camera (Bonus) */}
                 <VideoCamera />
 
-                {/* Voice Visualizer */}
-                <VoiceVisualizer
-                  isListening={isListeningMic}
-                  isSpeaking={isSpeakingQuestion}
-                  audioStream={micStreamRef.current}
-                  statusText={
-                    isSpeakingQuestion
-                      ? "AI Interviewer Speaking..."
-                      : isListeningMic
-                      ? "Microphone Live • Listening..."
-                      : "Microphone Ready"
-                  }
-                />
+                {/* Voice Visualizer (Hidden on mobile view, visible only on desktop) */}
+                <div className="hidden md:block">
+                  <VoiceVisualizer
+                    isListening={isListeningMic}
+                    isSpeaking={isSpeakingQuestion}
+                    audioStream={micStreamRef.current}
+                    statusText={
+                      isSpeakingQuestion
+                        ? "AI Interviewer Speaking..."
+                        : isListeningMic
+                        ? "Microphone Live • Listening..."
+                        : "Microphone Ready"
+                    }
+                  />
+                </div>
               </div>
 
               {/* Right Columns: Question & Candidate Answer */}

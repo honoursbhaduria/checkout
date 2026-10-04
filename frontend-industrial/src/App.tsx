@@ -1279,10 +1279,13 @@ export function App() {
               {/* Left Column: Instruments */}
               <div className="space-y-6">
                 <IndustrialMonitor />
-                <OscilloscopeWave
-                  isListening={isListeningMic}
-                  isSpeaking={isSpeakingQuestion}
-                />
+                {/* Audio Wave Spectrum (Hidden on mobile view, visible only on desktop) */}
+                <div className="hidden md:block">
+                  <OscilloscopeWave
+                    isListening={isListeningMic}
+                    isSpeaking={isSpeakingQuestion}
+                  />
+                </div>
               </div>
 
               {/* Right Column: Question Terminal & Answer */}

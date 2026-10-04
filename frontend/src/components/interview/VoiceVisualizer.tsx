@@ -6,6 +6,7 @@ interface VoiceVisualizerProps {
   isSpeaking: boolean;
   statusText?: string;
   audioStream?: MediaStream | null;
+  className?: string;
 }
 
 export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
@@ -13,6 +14,7 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
   isSpeaking,
   statusText,
   audioStream,
+  className,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -121,7 +123,7 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
   }, [isListening, isSpeaking]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 bg-white border-2 border-pencil rounded-lg md:rounded-wobbly shadow-sketchSm">
+    <div className={`flex flex-col items-center justify-center p-2.5 sm:p-3 bg-white border-2 border-pencil rounded-lg md:rounded-wobbly shadow-sketchSm ${className || ""}`}>
       <div className="flex items-center gap-2 mb-1">
         {isSpeaking ? (
           <Volume2 className="w-5 h-5 text-marker animate-pulse shrink-0" />
