@@ -19,11 +19,31 @@ class SynthesizeRequest(BaseModel):
     text: str
 
 
+import base64
+from fastapi import UploadFile, File
+
 @router.post("/transcribe")
 async def transcribe_audio_rest(data: TranscribeRequest):
     engine = ai_router.get_stt_provider()
-    # In production, decode audio_base64 to bytes; fallback handles text transcript
-    transcript = await engine.transcribe_audio(b"")
+    audio_bytes = b""
+    if data.audio_base64:
+        try:
+            b64 = data.audio_base64
+            if "," in b64:
+                b64 = b64.split(",", 1)[1]
+            audio_bytes = base64.b64decode(b64)
+        except Exception as e:
+            logger.error(f"Failed to decode base64 audio: {e}")
+
+    transcript = await engine.transcribe_audio(audio_bytes)
+    return APIResponse(data={"transcript": transcript})
+
+
+@router.post("/transcribe-file")
+async def transcribe_audio_file(file: UploadFile = File(...)):
+    engine = ai_router.get_stt_provider()
+    audio_bytes = await file.read()
+    transcript = await engine.transcribe_audio(audio_bytes)
     return APIResponse(data={"transcript": transcript})
 
 

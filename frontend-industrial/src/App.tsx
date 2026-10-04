@@ -110,6 +110,10 @@ export function App() {
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
 
   const recognitionRef = useRef<any>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   // Report states
   const [report, setReport] = useState<ReportData | null>(null);
@@ -144,67 +148,120 @@ export function App() {
     }
   };
 
-  const startMicListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Web Speech API is not supported in this browser. Please type response or click 'AUTO-SIMULATE ANSWER'.");
-      return;
-    }
+  const startMicListening = async () => {
+    setError(null);
+    setCandidateAnswer("");
 
     try {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch {}
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+
+        try {
+          audioChunksRef.current = [];
+          const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : MediaRecorder.isTypeSupported("audio/ogg")
+            ? "audio/ogg"
+            : "";
+          const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+          mr.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+          mr.start(250);
+          mediaRecorderRef.current = mr;
+        } catch (recErr) {
+          console.warn("MediaRecorder setup notice:", recErr);
+        }
       }
+    } catch (micErr: any) {
+      console.warn("Microphone hardware access notice:", micErr);
+    }
 
-      if (isSpeakingQuestion && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        setIsSpeakingQuestion(false);
+    setIsListeningMic(true);
+
+    if (isSpeakingQuestion && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingQuestion(false);
+    }
+
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch {}
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        recognition.onstart = () => {
+          setIsListeningMic(true);
+          setError(null);
+        };
+
+        recognition.onresult = (event: any) => {
+          let fullTranscript = "";
+          for (let i = 0; i < event.results.length; i++) {
+            fullTranscript += event.results[i][0].transcript + " ";
+          }
+          const clean = fullTranscript.trim();
+          if (clean) {
+            setCandidateAnswer(clean);
+          }
+        };
+
+        recognition.onerror = (e: any) => {
+          console.warn("Speech recognition notice (handled by backend faster-whisper):", e.error);
+        };
+
+        recognition.onend = () => {};
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (err: any) {
+        console.warn("Speech start error:", err);
       }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onstart = () => {
-        setIsListeningMic(true);
-        setError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let fullTranscript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          fullTranscript += event.results[i][0].transcript + " ";
-        }
-        const clean = fullTranscript.trim();
-        if (clean) {
-          setCandidateAnswer(clean);
-        }
-      };
-
-      recognition.onerror = (e: any) => {
-        console.warn("Speech recognition notice (handled gracefully):", e.error);
-        if (!candidateAnswer) {
-          handleQuickVoiceSample();
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListeningMic(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
-      console.error("Speech start error:", err);
-      setIsListeningMic(false);
-      setError("Audio capture failure: " + (err.message || "Unknown error"));
     }
   };
 
   const stopMicListening = () => {
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
+    }
+
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      mr.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (audioBlob.size > 500) {
+          try {
+            setIsTranscribing(true);
+            const transcript = await api.transcribeAudioFile(audioBlob);
+            if (transcript && transcript.trim()) {
+              setCandidateAnswer(transcript.trim());
+            } else if (!candidateAnswer) {
+              setCandidateAnswer("(Spoken audio captured)");
+            }
+          } catch (e: any) {
+            console.warn("Backend STT error:", e);
+          } finally {
+            setIsTranscribing(false);
+          }
+        }
+      };
+      try { mr.stop(); } catch {}
+    }
+
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
     }
     setIsListeningMic(false);
   };
@@ -976,6 +1033,13 @@ export function App() {
                     <div className="flex items-center gap-2 p-2.5 bg-[#2ed573]/15 border border-[#2ed573]/40 rounded-md text-ink font-mono text-xs animate-pulse mb-3">
                       <Mic className="w-4 h-4 text-safety animate-bounce" />
                       <span><strong>AUDIO RECEIVER ENGAGED:</strong> Audio stream active. Transcribed phonemes materialize below in real-time.</span>
+                    </div>
+                  )}
+
+                  {isTranscribing && (
+                    <div className="flex items-center gap-2 p-2.5 bg-[#f59e0b]/15 border border-[#f59e0b]/40 rounded-md text-ink font-mono text-xs animate-pulse mb-3">
+                      <Sparkles className="w-4 h-4 text-[#f59e0b] animate-spin" />
+                      <span><strong>PROCESSING NEURAL STT:</strong> Faster-Whisper transcribing audio recording...</span>
                     </div>
                   )}
 

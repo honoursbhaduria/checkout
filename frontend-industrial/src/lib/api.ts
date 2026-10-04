@@ -313,6 +313,26 @@ class ApiClient {
   async getPreparationPlan(interview_id: string): Promise<PreparationPlanData> {
     return this.request<PreparationPlanData>(`/interviews/${interview_id}/preparation`);
   }
+
+  async transcribeAudioFile(audioBlob: Blob): Promise<string> {
+    const formData = new FormData();
+    formData.append("file", audioBlob, "recording.webm");
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE}/voice/transcribe-file`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error?.message || "Failed to transcribe audio");
+    }
+    return json.data?.transcript || "";
+  }
 }
 
 export const api = new ApiClient();

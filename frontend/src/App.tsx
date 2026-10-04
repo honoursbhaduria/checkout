@@ -117,6 +117,9 @@ export function App() {
   // Speech Recognition & Mic Stream refs
   const recognitionRef = useRef<any>(null);
   const micStreamRef = useRef<MediaStream | null>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   // Report state
   const [report, setReport] = useState<ReportData | null>(null);
@@ -187,11 +190,12 @@ export function App() {
     }
   };
 
-  // Start Mic listening with error & permission resilience
+  // Start Mic listening with real hardware recording and faster-whisper backend STT
   const startMicListening = async () => {
     setError(null);
+    setCandidateAnswer("");
 
-    // 1. Request real hardware microphone access
+    // 1. Request real hardware microphone access and begin MediaRecorder capture
     let stream: MediaStream | null = null;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
@@ -199,6 +203,27 @@ export function App() {
         micStreamRef.current = stream;
         setIsListeningMic(true);
         setError(null);
+
+        try {
+          audioChunksRef.current = [];
+          const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+            ? "audio/webm;codecs=opus"
+            : MediaRecorder.isTypeSupported("audio/webm")
+            ? "audio/webm"
+            : MediaRecorder.isTypeSupported("audio/ogg")
+            ? "audio/ogg"
+            : "";
+          const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+          mr.ondataavailable = (e) => {
+            if (e.data && e.data.size > 0) {
+              audioChunksRef.current.push(e.data);
+            }
+          };
+          mr.start(250);
+          mediaRecorderRef.current = mr;
+        } catch (recErr) {
+          console.warn("MediaRecorder setup notice:", recErr);
+        }
       }
     } catch (micErr: any) {
       console.warn("Microphone hardware access notice:", micErr);
@@ -216,7 +241,7 @@ export function App() {
       setIsSpeakingQuestion(false);
     }
 
-    // 2. Start Web Speech recognition if supported as progressive enhancement
+    // 2. Start Web Speech recognition if supported for real-time live typing
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       try {
@@ -246,28 +271,15 @@ export function App() {
         };
 
         recognition.onerror = (e: any) => {
-          console.warn("Cloud speech recognition notice (handled gracefully):", e.error);
-          // Keep microphone listening active and gracefully transcribe answer without error interruptions
-          if (!candidateAnswer) {
-            handleQuickVoiceSample();
-          }
+          console.warn("Browser speech recognition notice (handled by backend faster-whisper):", e.error);
         };
 
-        recognition.onend = () => {
-          // Keep active unless stopped explicitly
-        };
+        recognition.onend = () => {};
 
         recognitionRef.current = recognition;
         recognition.start();
       } catch (err: any) {
         console.warn("Speech start exception:", err);
-        if (!candidateAnswer) {
-          handleQuickVoiceSample();
-        }
-      }
-    } else {
-      if (!candidateAnswer) {
-        handleQuickVoiceSample();
       }
     }
   };
@@ -276,15 +288,35 @@ export function App() {
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
+
+    const mr = mediaRecorderRef.current;
+    if (mr && mr.state !== "inactive") {
+      mr.onstop = async () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        if (audioBlob.size > 500) {
+          try {
+            setIsTranscribing(true);
+            const transcript = await api.transcribeAudioFile(audioBlob);
+            if (transcript && transcript.trim()) {
+              setCandidateAnswer(transcript.trim());
+            } else if (!candidateAnswer) {
+              setCandidateAnswer("(Spoken audio captured)");
+            }
+          } catch (e: any) {
+            console.warn("Backend STT error:", e);
+          } finally {
+            setIsTranscribing(false);
+          }
+        }
+      };
+      try { mr.stop(); } catch {}
+    }
+
     if (micStreamRef.current) {
       micStreamRef.current.getTracks().forEach((track) => track.stop());
       micStreamRef.current = null;
     }
     setIsListeningMic(false);
-
-    if (!candidateAnswer) {
-      handleQuickVoiceSample();
-    }
   };
 
   const toggleMicListening = () => {
@@ -1084,6 +1116,13 @@ export function App() {
                     <div className="flex items-center gap-2 p-3 bg-blue-50 border-2 border-pen rounded-wobbly text-pen text-base font-body animate-pulse mb-3">
                       <Mic className="w-5 h-5 text-marker animate-bounce" />
                       <span><strong>Listening to your voice...</strong> Speak your answer now! Transcription updates live below.</span>
+                    </div>
+                  )}
+
+                  {isTranscribing && (
+                    <div className="flex items-center gap-2 p-3 bg-amber-50 border-2 border-pencil rounded-wobbly text-pencil text-base font-body animate-pulse mb-3">
+                      <Sparkles className="w-5 h-5 text-marker animate-spin" />
+                      <span><strong>Transcribing your spoken words with Whisper STT...</strong> Processing audio now...</span>
                     </div>
                   )}
 
