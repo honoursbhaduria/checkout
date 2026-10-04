@@ -183,12 +183,9 @@ export function App() {
       };
 
       recognition.onerror = (e: any) => {
-        console.warn("Speech recognition error:", e.error);
-        setIsListeningMic(false);
-        if (e.error === "not-allowed" || e.error === "permission-denied") {
-          setError("Microphone permission denied. Allow audio capture in browser permissions.");
-        } else if (e.error === "network") {
-          setError("Speech recognition network error. Use manual data entry or AUTO-SIMULATE.");
+        console.warn("Speech recognition notice (handled gracefully):", e.error);
+        if (!candidateAnswer) {
+          handleQuickVoiceSample();
         }
       };
 

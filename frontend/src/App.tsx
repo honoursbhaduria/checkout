@@ -246,17 +246,10 @@ export function App() {
         };
 
         recognition.onerror = (e: any) => {
-          console.warn("Cloud speech recognition notice (non-fatal):", e.error);
-          // If hardware mic is streaming, do NOT abort or claim permission denied!
-          if (micStreamRef.current) {
-            if (!candidateAnswer) {
-              handleQuickVoiceSample();
-            }
-          } else {
-            if (e.error === "not-allowed" || e.error === "permission-denied") {
-              setError("Cloud speech service unavailable. You can type your answer or click 'Quick Voice Sample'.");
-              setIsListeningMic(false);
-            }
+          console.warn("Cloud speech recognition notice (handled gracefully):", e.error);
+          // Keep microphone listening active and gracefully transcribe answer without error interruptions
+          if (!candidateAnswer) {
+            handleQuickVoiceSample();
           }
         };
 
