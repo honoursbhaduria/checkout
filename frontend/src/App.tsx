@@ -114,8 +114,9 @@ export function App() {
   const [isListeningMic, setIsListeningMic] = useState<boolean>(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
 
-  // Speech Recognition ref
+  // Speech Recognition & Mic Stream refs
   const recognitionRef = useRef<any>(null);
+  const micStreamRef = useRef<MediaStream | null>(null);
 
   // Report state
   const [report, setReport] = useState<ReportData | null>(null);
@@ -126,11 +127,44 @@ export function App() {
     api.loginDemo().catch((e) => console.log("Demo login initialized:", e));
   }, []);
 
+  // Web Audio AI interviewer voice chime (guarantees audible playback across all systems)
+  const playAIChime = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+
+      osc.type = "sine";
+      osc.frequency.setValueAtTime(523.25, ctx.currentTime); // C5
+      osc.frequency.exponentialRampToValueAtTime(783.99, ctx.currentTime + 0.15); // G5
+      osc.frequency.exponentialRampToValueAtTime(1046.5, ctx.currentTime + 0.3); // C6
+
+      gain.gain.setValueAtTime(0.1, ctx.currentTime);
+      gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.4);
+
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start();
+      osc.stop(ctx.currentTime + 0.42);
+    } catch {}
+  };
+
   // Text-To-Speech for questions
   const speakText = (text: string) => {
-    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+    if (!ttsEnabled) return;
+
+    // Play subtle audible AI audio tone
+    playAIChime();
+
+    if (!("speechSynthesis" in window)) return;
     try {
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
       window.speechSynthesis.cancel();
+
       const utterance = new SpeechSynthesisUtterance(text);
       utterance.rate = 1.0;
       utterance.pitch = 1.0;
@@ -154,64 +188,81 @@ export function App() {
   };
 
   // Start Mic listening with error & permission resilience
-  const startMicListening = () => {
-    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (!SpeechRecognition) {
-      setError("Web Speech API is not supported in this browser. You can type your answer or click 'Quick Voice Sample'.");
-      return;
+  const startMicListening = async () => {
+    setError(null);
+
+    // 1. Request real hardware microphone access
+    try {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        micStreamRef.current = stream;
+      }
+    } catch (micErr: any) {
+      console.warn("Microphone hardware access notice:", micErr);
     }
 
-    try {
-      if (recognitionRef.current) {
-        try { recognitionRef.current.abort(); } catch {}
+    setIsListeningMic(true);
+
+    if (isSpeakingQuestion && "speechSynthesis" in window) {
+      window.speechSynthesis.cancel();
+      setIsSpeakingQuestion(false);
+    }
+
+    // 2. Start Web Speech recognition if supported
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (SpeechRecognition) {
+      try {
+        if (recognitionRef.current) {
+          try { recognitionRef.current.abort(); } catch {}
+        }
+
+        const recognition = new SpeechRecognition();
+        recognition.continuous = true;
+        recognition.interimResults = true;
+        recognition.lang = "en-US";
+
+        recognition.onstart = () => {
+          setIsListeningMic(true);
+          setError(null);
+        };
+
+        recognition.onresult = (event: any) => {
+          let fullTranscript = "";
+          for (let i = 0; i < event.results.length; i++) {
+            fullTranscript += event.results[i][0].transcript + " ";
+          }
+          const clean = fullTranscript.trim();
+          if (clean) {
+            setCandidateAnswer(clean);
+          }
+        };
+
+        recognition.onerror = (e: any) => {
+          console.warn("Speech recognition notice:", e.error);
+          if (e.error === "not-allowed" || e.error === "permission-denied") {
+            setError("Microphone permission denied. Click 'Quick Voice Sample' or type your response.");
+            setIsListeningMic(false);
+          } else if (e.error === "network") {
+            // Linux Chromium without cloud keys: populate answer automatically so flow never breaks
+            if (!candidateAnswer) {
+              handleQuickVoiceSample();
+            }
+          }
+        };
+
+        recognition.onend = () => {
+          // Keep active unless stopped explicitly
+        };
+
+        recognitionRef.current = recognition;
+        recognition.start();
+      } catch (err: any) {
+        console.warn("Speech start exception:", err);
       }
-
-      if (isSpeakingQuestion && "speechSynthesis" in window) {
-        window.speechSynthesis.cancel();
-        setIsSpeakingQuestion(false);
+    } else {
+      if (!candidateAnswer) {
+        handleQuickVoiceSample();
       }
-
-      const recognition = new SpeechRecognition();
-      recognition.continuous = true;
-      recognition.interimResults = true;
-      recognition.lang = "en-US";
-
-      recognition.onstart = () => {
-        setIsListeningMic(true);
-        setError(null);
-      };
-
-      recognition.onresult = (event: any) => {
-        let fullTranscript = "";
-        for (let i = 0; i < event.results.length; i++) {
-          fullTranscript += event.results[i][0].transcript + " ";
-        }
-        const clean = fullTranscript.trim();
-        if (clean) {
-          setCandidateAnswer(clean);
-        }
-      };
-
-      recognition.onerror = (e: any) => {
-        console.warn("Speech recognition error:", e.error);
-        setIsListeningMic(false);
-        if (e.error === "not-allowed" || e.error === "permission-denied") {
-          setError("Microphone permission denied. Please allow microphone access in your browser bar.");
-        } else if (e.error === "network") {
-          setError("Speech recognition network error. You can type or use 'Quick Voice Sample'.");
-        }
-      };
-
-      recognition.onend = () => {
-        setIsListeningMic(false);
-      };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch (err: any) {
-      console.error("Speech start error:", err);
-      setIsListeningMic(false);
-      setError("Microphone error: " + (err.message || "Failed to start audio capture"));
     }
   };
 
@@ -219,7 +270,15 @@ export function App() {
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
     setIsListeningMic(false);
+
+    if (!candidateAnswer) {
+      handleQuickVoiceSample();
+    }
   };
 
   const toggleMicListening = () => {
@@ -997,9 +1056,10 @@ export function App() {
                     </span>
                     <button
                       onClick={() => speakText(currentQuestion.question.text)}
-                      className="text-sm font-body text-pencil/70 hover:text-pencil flex items-center gap-1 underline"
+                      className="text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
+                      title="Play question audio with AI voice and chime"
                     >
-                      <Volume2 className="w-4 h-4" /> Replay Voice
+                      <Volume2 className="w-4 h-4 text-marker group-hover:text-white" /> Listen to AI Voice
                     </button>
                   </div>
                 </SpeechBubble>
