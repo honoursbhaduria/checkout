@@ -32,8 +32,8 @@ async def test_full_interview_lifecycle():
 
         # 3. Create Resume
         resume_res = await ac.post("/api/v1/resumes", headers=headers, json={
-            "candidate_name": "Alex Rivera",
-            "raw_text": "Alex Rivera. Skilled in Python, FastAPI, PostgreSQL, Redis, and Vector search. Built microservices processing 15,000 req/min and optimized latency by 18%."
+            "candidate_name": "Honours Bhadauria",
+            "raw_text": "Honours Bhadauria. Skilled in Python, FastAPI, PostgreSQL, Redis, and Vector search. Built microservices processing 15,000 req/min and optimized latency by 18%."
         })
         assert resume_res.status_code == 201
         resume_id = resume_res.json()["data"]["id"]

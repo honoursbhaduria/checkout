@@ -43,9 +43,9 @@ Preferred Skills:
 """
 
 DEMO_RESUME = """
-Alex Rivera
-Email: alex.rivera@example.com | Phone: +1 555-0199 | Location: Bangalore / Remote
-GitHub: github.com/alexrivera-dev | LinkedIn: linkedin.com/in/alexrivera-ai
+Honours Bhadauria
+Email: honours.bhadauria@example.com | Phone: +1 555-0199 | Location: Bangalore / Remote
+GitHub: github.com/honoursbhadauria | LinkedIn: linkedin.com/in/honoursbhadauria
 
 Summary:
 Enthusiastic Computer Science graduate and AI Engineer with hands-on experience developing asynchronous backend services, RAG-powered conversational agents, and LLM applications in Python and FastAPI.
@@ -90,7 +90,7 @@ async def seed():
             user = User(
                 email="candidate@studentcredibility.com",
                 hashed_password=get_password_hash("accelerator123"),
-                full_name="Alex Rivera",
+                full_name="Honours Bhadauria",
                 role="candidate"
             )
             session.add(user)

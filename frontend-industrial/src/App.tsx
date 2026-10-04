@@ -60,8 +60,8 @@ Preferred:
 - Redis & In-Memory Caching
 - Docker & System Design`;
 
-const SAMPLE_RESUME = `Alex Rivera
-Email: alex.rivera@example.com | GitHub: github.com/alexrivera-dev
+const SAMPLE_RESUME = `Honours Bhadauria
+Email: honours.bhadauria@example.com | GitHub: github.com/honoursbhadauria
 
 Summary:
 Computer Science graduate with experience developing asynchronous backend services, RAG-powered conversational agents, and LLM applications in Python and FastAPI.
@@ -90,7 +90,7 @@ export function App() {
   const [jdCompany, setJdCompany] = useState("Student Credibility");
   const [jdText, setJdText] = useState(SAMPLE_JD);
   const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
-  const [candidateName, setCandidateName] = useState("Alex Rivera");
+  const [candidateName, setCandidateName] = useState("Honours Bhadauria");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
   const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">("upload");
   const [showChunksDrawer, setShowChunksDrawer] = useState<boolean>(false);

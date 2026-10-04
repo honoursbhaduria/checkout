@@ -61,7 +61,7 @@ The database is pre-seeded with a candidate profile:
 - **Email:** `candidate@studentcredibility.com`
 - **Password:** `accelerator123`
 - **Target Role:** AI Engineer Intern at Student Credibility
-- **Candidate:** Alex Rivera (experience with FastAPI, RAG, and an 18% optimization claim)
+- **Candidate:** Honours Bhadauria (experience with FastAPI, RAG, and an 18% optimization claim)
 
 ### 3. Running Backend Manually
 ```bash
