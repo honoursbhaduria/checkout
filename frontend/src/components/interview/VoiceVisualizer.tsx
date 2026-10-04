@@ -5,14 +5,58 @@ interface VoiceVisualizerProps {
   isListening: boolean;
   isSpeaking: boolean;
   statusText?: string;
+  audioStream?: MediaStream | null;
 }
 
 export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
   isListening,
   isSpeaking,
   statusText,
+  audioStream,
 }) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
+  const dataArrayRef = useRef<any>(null);
+
+  // Setup Web Audio Analyser when real audioStream is provided
+  useEffect(() => {
+    if (!audioStream) {
+      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+      analyserRef.current = null;
+      dataArrayRef.current = null;
+      return;
+    }
+
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 64;
+      const source = ctx.createMediaStreamSource(audioStream);
+      source.connect(analyser);
+
+      const bufferLength = analyser.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+
+      audioContextRef.current = ctx;
+      analyserRef.current = analyser;
+      dataArrayRef.current = dataArray;
+    } catch (e) {
+      console.warn("Audio analyser setup error:", e);
+    }
+
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch(() => {});
+        audioContextRef.current = null;
+      }
+    };
+  }, [audioStream]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -29,12 +73,30 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
       const height = canvas.height;
       const mid = height / 2;
 
+      let realVol = 0;
+      if (analyserRef.current && dataArrayRef.current) {
+        analyserRef.current.getByteFrequencyData(dataArrayRef.current);
+        let sum = 0;
+        for (let i = 0; i < dataArrayRef.current.length; i++) {
+          sum += dataArrayRef.current[i];
+        }
+        realVol = sum / dataArrayRef.current.length;
+      }
+
       ctx.beginPath();
       ctx.lineWidth = 3;
       ctx.strokeStyle = isSpeaking ? "#ff4d4d" : isListening ? "#2d5da1" : "#2d2d2d";
       ctx.lineCap = "round";
 
-      const amplitude = isSpeaking ? 18 : isListening ? 24 : 4;
+      // Scale amplitude by real volume if microphone is streaming
+      const amplitude = isSpeaking
+        ? 18
+        : isListening
+        ? realVol > 5
+          ? Math.min(32, 8 + (realVol / 255) * 45)
+          : 12
+        : 3;
+
       const frequency = isSpeaking ? 0.08 : isListening ? 0.12 : 0.03;
 
       for (let x = 0; x < width; x += 3) {
@@ -67,7 +129,12 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
           <Mic className={`w-5 h-5 ${isListening ? "text-pen animate-bounce" : "text-pencil/50"}`} />
         )}
         <span className="font-heading text-lg font-bold">
-          {statusText || (isSpeaking ? "AI Interviewer Speaking..." : isListening ? "Listening to Your Answer..." : "Microphone Ready")}
+          {statusText ||
+            (isSpeaking
+              ? "AI Interviewer Speaking..."
+              : isListening
+              ? "Microphone Live • Listening..."
+              : "Microphone Ready")}
         </span>
       </div>
       <canvas

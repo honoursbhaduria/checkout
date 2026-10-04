@@ -192,13 +192,21 @@ export function App() {
     setError(null);
 
     // 1. Request real hardware microphone access
+    let stream: MediaStream | null = null;
     try {
       if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         micStreamRef.current = stream;
+        setIsListeningMic(true);
+        setError(null);
       }
     } catch (micErr: any) {
       console.warn("Microphone hardware access notice:", micErr);
+      if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
+        setError("Microphone permission denied by browser. Please allow microphone in your URL bar, or click 'Quick Voice Sample'.");
+        setIsListeningMic(false);
+        return;
+      }
     }
 
     setIsListeningMic(true);
@@ -208,7 +216,7 @@ export function App() {
       setIsSpeakingQuestion(false);
     }
 
-    // 2. Start Web Speech recognition if supported
+    // 2. Start Web Speech recognition if supported as progressive enhancement
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     if (SpeechRecognition) {
       try {
@@ -238,14 +246,16 @@ export function App() {
         };
 
         recognition.onerror = (e: any) => {
-          console.warn("Speech recognition notice:", e.error);
-          if (e.error === "not-allowed" || e.error === "permission-denied") {
-            setError("Microphone permission denied. Click 'Quick Voice Sample' or type your response.");
-            setIsListeningMic(false);
-          } else if (e.error === "network") {
-            // Linux Chromium without cloud keys: populate answer automatically so flow never breaks
+          console.warn("Cloud speech recognition notice (non-fatal):", e.error);
+          // If hardware mic is streaming, do NOT abort or claim permission denied!
+          if (micStreamRef.current) {
             if (!candidateAnswer) {
               handleQuickVoiceSample();
+            }
+          } else {
+            if (e.error === "not-allowed" || e.error === "permission-denied") {
+              setError("Cloud speech service unavailable. You can type your answer or click 'Quick Voice Sample'.");
+              setIsListeningMic(false);
             }
           }
         };
@@ -258,6 +268,9 @@ export function App() {
         recognition.start();
       } catch (err: any) {
         console.warn("Speech start exception:", err);
+        if (!candidateAnswer) {
+          handleQuickVoiceSample();
+        }
       }
     } else {
       if (!candidateAnswer) {
@@ -1033,11 +1046,12 @@ export function App() {
                 <VoiceVisualizer
                   isListening={isListeningMic}
                   isSpeaking={isSpeakingQuestion}
+                  audioStream={micStreamRef.current}
                   statusText={
                     isSpeakingQuestion
                       ? "AI Interviewer Speaking..."
                       : isListeningMic
-                      ? "Listening to your answer..."
+                      ? "Microphone Live • Listening..."
                       : "Microphone Ready"
                   }
                 />
