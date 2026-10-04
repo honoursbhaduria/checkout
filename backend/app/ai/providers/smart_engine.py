@@ -5,6 +5,20 @@ from uuid import uuid4
 from app.ai.contracts import LLMProvider, STTProvider, TTSProvider
 
 
+TECH_CATALOG = {
+    "Python": ["python", "django", "fastapi", "flask", "asyncio", "pandas", "numpy"],
+    "FastAPI": ["fastapi", "starlette", "pydantic", "uvicorn", "rest apis", "rest api"],
+    "SQL & Databases": ["sql", "postgresql", "postgres", "mysql", "sqlite", "nosql", "mongodb", "database", "indexing"],
+    "Redis & Caching": ["redis", "cache", "caching", "memcached"],
+    "Machine Learning / AI": ["machine learning", "ml", "deep learning", "neural network", "pytorch", "tensorflow", "scikit-learn"],
+    "LLMs & RAG": ["llm", "large language model", "rag", "retrieval augmented generation", "langchain", "llamaindex", "prompt engineering", "embeddings", "vector database", "qdrant", "chroma"],
+    "APIs & Microservices": ["api", "apis", "rest", "rest apis", "graphql", "microservices", "grpc", "endpoints"],
+    "Docker & Cloud": ["docker", "container", "kubernetes", "k8s", "aws", "gcp", "azure", "ci/cd"],
+    "System Design": ["system design", "distributed systems", "concurrency", "scalability", "load balancing"],
+    "Web & Frontend": ["react", "next.js", "typescript", "javascript", "tailwind", "html", "css"]
+}
+
+
 class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
     """
     Intelligent NLP & Domain Reasoner for offline, local, or deterministic fallback execution.
@@ -33,25 +47,11 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
         elif any(w in text_lower for w in ["senior", "sr", "lead", "staff", "principal"]):
             seniority = "senior"
 
-        # Skills dictionary
-        tech_catalog = {
-            "Python": ["python", "django", "fastapi", "flask", "asyncio", "pandas", "numpy"],
-            "FastAPI": ["fastapi", "starlette", "pydantic", "uvicorn"],
-            "SQL & Databases": ["sql", "postgresql", "postgres", "mysql", "sqlite", "nosql", "mongodb"],
-            "Redis & Caching": ["redis", "cache", "memcached"],
-            "Machine Learning / AI": ["machine learning", "ml", "deep learning", "neural network", "pytorch", "tensorflow", "scikit-learn"],
-            "LLMs & RAG": ["llm", "large language model", "rag", "retrieval augmented generation", "langchain", "llamaindex", "prompt engineering", "embeddings", "vector database", "qdrant", "chroma"],
-            "APIs & Microservices": ["api", "rest", "graphql", "microservices", "grpc", "endpoints"],
-            "Docker & Cloud": ["docker", "container", "kubernetes", "k8s", "aws", "gcp", "azure", "ci/cd"],
-            "System Design": ["system design", "distributed systems", "concurrency", "scalability", "load balancing"],
-            "Web & Frontend": ["react", "next.js", "typescript", "javascript", "tailwind", "html", "css"]
-        }
-
         detected_required: List[str] = []
         detected_preferred: List[str] = []
         detected_tools: List[str] = []
 
-        for category, keywords in tech_catalog.items():
+        for category, keywords in TECH_CATALOG.items():
             for kw in keywords:
                 if re.search(r'\b' + re.escape(kw) + r'\b', text_lower):
                     if category not in detected_required:
@@ -163,15 +163,26 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
         missing = []
 
         for req in jd_skills:
-            if any(rs.lower() in req.lower() or req.lower() in rs.lower() for rs in resume_skills):
+            aliases = [req.lower()] + [kw.lower() for kw in TECH_CATALOG.get(req, [])]
+            is_matched = False
+            matched_rs = None
+            for rs in resume_skills:
+                rs_lower = rs.lower()
+                rs_aliases = [rs_lower] + [kw.lower() for kw in TECH_CATALOG.get(rs, [])]
+                if any(a in rs_lower or rs_lower in a for a in aliases) or any(a in rsa for a in aliases for rsa in rs_aliases):
+                    is_matched = True
+                    matched_rs = rs
+                    break
+
+            if is_matched:
                 matched.append({
                     "skill": req,
                     "status": "matched",
                     "jd_evidence": f"JD specifies {req} as a primary required competency.",
-                    "resume_evidence": f"Candidate demonstrates hands-on experience in {req}.",
+                    "resume_evidence": f"Candidate demonstrates hands-on experience in {matched_rs or req}.",
                     "confidence": 0.96
                 })
-            elif any(word in str(resume_skills).lower() for word in req.lower().split()):
+            elif any(word in str(resume_skills).lower() for word in req.lower().split() if len(word) > 2):
                 partial.append({
                     "skill": req,
                     "status": "partial",

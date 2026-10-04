@@ -6,17 +6,23 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+import os
+from sqlalchemy.pool import NullPool
+
 # Base class for SQLAlchemy declarative models
 class Base(DeclarativeBase):
     pass
 
+
+is_test = os.environ.get("TESTING") == "1" or settings.ENVIRONMENT == "test"
 
 # Engine and sessionmaker
 engine = create_async_engine(
     settings.DATABASE_URL,
     echo=settings.DATABASE_ECHO,
     future=True,
-    pool_pre_ping=True
+    poolclass=NullPool if is_test else None,
+    pool_pre_ping=False if is_test else True
 )
 
 AsyncSessionLocal = async_sessionmaker(

@@ -5,9 +5,6 @@ from app.main import app
 from app.core.database import init_db
 
 
-@pytest_asyncio.fixture(autouse=True)
-async def setup_test_db():
-    await init_db()
 
 
 @pytest.mark.asyncio

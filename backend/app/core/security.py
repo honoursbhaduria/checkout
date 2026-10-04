@@ -40,9 +40,11 @@ def create_refresh_token(subject: Union[str, Any], expires_delta: Optional[timed
     else:
         expire = datetime.now(timezone.utc) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
         
+    import uuid
     to_encode = {
         "exp": expire,
         "sub": str(subject),
+        "jti": str(uuid.uuid4()),
         "type": "refresh",
         "iat": datetime.now(timezone.utc)
     }
