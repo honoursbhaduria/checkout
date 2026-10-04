@@ -10,7 +10,7 @@ router = APIRouter(prefix="/health", tags=["Health Checks"])
 
 @router.get("/live", status_code=status.HTTP_200_OK)
 async def liveness():
-    return {"status": "alive", "service": "ai-interview-accelerator"}
+    return {"status": "alive", "service": "checkout"}
 
 
 @router.get("/ready")

@@ -1,5 +1,5 @@
-# AI Interview Accelerator — Student Credibility
-**AI Product Engineer Intern Challenge (Assignment-3)**
+# Checkout — AI Interview Accelerator
+**Student Credibility — AI Product Engineer Challenge (Assignment-3)**
 
 An end-to-end, production-grade, AI-powered Interview Accelerator that helps students and job candidates prepare for technical interviews. The platform bridges the gap between what candidates have on their resumes and what employers expect in job descriptions.
 

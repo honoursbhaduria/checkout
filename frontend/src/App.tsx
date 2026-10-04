@@ -302,12 +302,17 @@ export function App() {
         <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3">
             <div className="w-11 h-11 rounded-wobbly bg-marker border-2 border-pencil flex items-center justify-center text-white font-heading text-2xl font-bold shadow-sketchSm">
-              SC
+              CK
             </div>
             <div>
-              <h1 className="font-heading text-2xl md:text-3xl font-bold text-pencil leading-none">
-                AI Interview Accelerator
-              </h1>
+              <div className="flex items-center gap-2">
+                <h1 className="font-heading text-3xl md:text-4xl font-bold text-pencil leading-none">
+                  Checkout
+                </h1>
+                <span className="text-xs bg-pen text-white px-2 py-0.5 rounded-full border border-pencil font-body uppercase tracking-wider font-bold">
+                  AI Interview Accelerator
+                </span>
+              </div>
               <p className="font-body text-base text-pencil/70">
                 Personalized Interview Simulator by Student Credibility
               </p>
