@@ -40,10 +40,10 @@ async def transcribe_audio_rest(data: TranscribeRequest):
 
 
 @router.post("/transcribe-file")
-async def transcribe_audio_file(file: UploadFile = File(...)):
+async def transcribe_audio_file(file: UploadFile = File(...), fast: bool = False):
     engine = ai_router.get_stt_provider()
     audio_bytes = await file.read()
-    transcript = await engine.transcribe_audio(audio_bytes)
+    transcript = await engine.transcribe_audio(audio_bytes, fast=fast)
     return APIResponse(data={"transcript": transcript})
 
 
@@ -76,38 +76,48 @@ async def synthesize_text_rest(data: SynthesizeRequest):
                 resp = await client.post(url, json=payload)
                 if resp.status_code == 200:
                     body = resp.json()
+                    # Collect EVERY audio part — long texts come back split across
+                    # multiple parts; playing only the first one cuts speech off mid-way.
+                    pcm_chunks: list[bytes] = []
+                    rate = 24000
                     for cand in body.get("candidates", []):
                         for part in cand.get("content", {}).get("parts", []):
                             inline = part.get("inlineData") or {}
                             b64 = inline.get("data")
-                            if b64:
-                                import base64 as _b64
-                                import struct as _struct
-                                raw = _b64.b64decode(b64)
-                                mime = inline.get("mimeType", "audio/wav")
-                                # Gemini returns raw PCM S16LE mono 24kHz (no container).
-                                # Browsers can't play headerless PCM — wrap in WAV.
-                                if raw[:4] != b"RIFF":
-                                    rate = 24000
-                                    m = mime.lower()
-                                    if "rate=16000" in m or "16000" in m:
-                                        rate = 16000
-                                    n = len(raw)
-                                    header = _struct.pack(
-                                        "<4sI4s4sIHHIIHH4sI",
-                                        b"RIFF", 36 + n, b"WAVE",
-                                        b"fmt ", 16, 1, 1, rate,
-                                        rate * 2, 2, 16,
-                                        b"data", n,
-                                    )
-                                    raw = header + raw
-                                    mime = "audio/wav"
+                            if not b64:
+                                continue
+                            import base64 as _b64
+                            raw = _b64.b64decode(b64)
+                            if raw[:4] == b"RIFF":
+                                # Already containerized — use as-is
                                 return APIResponse(data={
                                     "status": "ready",
                                     "mode": "server_tts",
-                                    "audio_base64": _b64.b64encode(raw).decode("utf-8"),
-                                    "mime_type": mime,
+                                    "audio_base64": b64,
+                                    "mime_type": inline.get("mimeType", "audio/wav"),
                                 })
+                            m = (inline.get("mimeType") or "").lower()
+                            if "rate=16000" in m or "16000" in m:
+                                rate = 16000
+                            pcm_chunks.append(raw)
+                    if pcm_chunks:
+                        import base64 as _b64
+                        import struct as _struct
+                        pcm = b"".join(pcm_chunks)
+                        n = len(pcm)
+                        header = _struct.pack(
+                            "<4sI4s4sIHHIIHH4sI",
+                            b"RIFF", 36 + n, b"WAVE",
+                            b"fmt ", 16, 1, 1, rate,
+                            rate * 2, 2, 16,
+                            b"data", n,
+                        )
+                        return APIResponse(data={
+                            "status": "ready",
+                            "mode": "server_tts",
+                            "audio_base64": _b64.b64encode(header + pcm).decode("utf-8"),
+                            "mime_type": "audio/wav",
+                        })
                 else:
                     logger.warning(f"Gemini TTS HTTP {resp.status_code}: {resp.text[:200]}")
         except Exception as e:

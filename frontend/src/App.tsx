@@ -142,6 +142,7 @@ export function App() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const liveIntervalRef = useRef<any>(null);
+  const liveSentCountRef = useRef<number>(0);
   const isTranscribingSliceRef = useRef<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
@@ -566,32 +567,39 @@ export function App() {
         mr.start(400);
         mediaRecorderRef.current = mr;
 
-        // Live real-time audio transcription interval: sends accumulated audio slice every 1.5 seconds
+        // Live transcription: send only NEW audio since the last slice (header +
+        // delta) every 2s in fast single-pass mode — each request stays small
+        // and constant-time no matter how long you speak.
         if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+        liveSentCountRef.current = 0;
         liveIntervalRef.current = setInterval(async () => {
-          if (audioChunksRef.current.length >= 2 && !isTranscribingSliceRef.current) {
-            const currentBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
-            if (currentBlob.size > 800) {
-              try {
-                isTranscribingSliceRef.current = true;
-                const partial = await api.transcribeAudioFile(currentBlob);
-                const cleanPartial = (partial || "").trim();
-                if (cleanPartial) {
-                  // Ignore tiny re-transcription flicker so text only flows forward
-                  setCandidateAnswer((prev) => {
-                    if (cleanPartial === prev) return prev;
-                    if (prev.startsWith(cleanPartial) && prev.length - cleanPartial.length < 12) return prev;
-                    return cleanPartial;
-                  });
-                }
-              } catch (e) {
-                console.warn("Live slice STT error:", e);
-              } finally {
-                isTranscribingSliceRef.current = false;
-              }
+          const chunks = audioChunksRef.current;
+          if (chunks.length <= liveSentCountRef.current || isTranscribingSliceRef.current) return;
+          const newChunks = chunks.slice(liveSentCountRef.current);
+          const newSize = newChunks.reduce((s, c) => s + c.size, 0);
+          if (newSize < 1500) return;
+          // First chunk carries the EBML header — prepend so the delta decodes alone
+          const sliceBlob = new Blob([chunks[0], ...newChunks], { type: mr.mimeType || "audio/webm" });
+          try {
+            isTranscribingSliceRef.current = true;
+            const partial = await api.transcribeAudioFile(sliceBlob, true);
+            liveSentCountRef.current = audioChunksRef.current.length;
+            const cleanPartial = (partial || "").trim();
+            if (cleanPartial) {
+              // Delta slices hold only new speech → append, never replace
+              setCandidateAnswer((prev) => {
+                if (!prev) return cleanPartial;
+                if (prev.endsWith(cleanPartial) || prev.includes(cleanPartial)) return prev;
+                return `${prev} ${cleanPartial}`.trim();
+              });
             }
+          } catch (e) {
+            console.warn("Live slice STT error:", e);
+            liveSentCountRef.current = audioChunksRef.current.length;
+          } finally {
+            isTranscribingSliceRef.current = false;
           }
-        }, 1500);
+        }, 2000);
       } catch (recErr) {
         console.warn("MediaRecorder setup notice:", recErr);
       }
@@ -638,9 +646,12 @@ export function App() {
           const clean = fullTranscript.trim();
           if (clean) {
             setCandidateAnswer((prev) => {
-              if (clean === prev) return prev;
-              if (prev.startsWith(clean) && prev.length - clean.length < 12) return prev;
-              return clean;
+              if (!prev) return clean;
+              if (clean === prev || prev.includes(clean)) return prev;
+              // Browser transcript is cumulative — extend when it covers our text
+              if (clean.startsWith(prev)) return clean;
+              if (clean.length > prev.length && prev.length < 20) return clean;
+              return `${prev} ${clean}`.trim();
             });
           }
         };

@@ -28,6 +28,26 @@ async def lifespan(app: FastAPI):
         await init_db()
     except Exception as e:
         logger.error(f"Database initialization warning: {e}")
+
+    # Warm up the STT model in the background so the first mic transcription
+    # doesn't pay the download + load cost mid-interview.
+    async def _warmup_stt():
+        try:
+            import asyncio as _asyncio
+            from app.ai.router import ai_router as _ai_router
+            provider = _ai_router.get_stt_provider()
+            loader = getattr(provider, "_get_model", None)
+            if callable(loader):
+                await _asyncio.to_thread(loader)
+                logger.info("STT model preloaded.")
+        except Exception as e:
+            logger.warning(f"STT warmup skipped: {e}")
+
+    try:
+        import asyncio
+        asyncio.create_task(_warmup_stt())
+    except Exception:
+        pass
     yield
     logger.info("Shutting down backend services...")
     await close_redis()

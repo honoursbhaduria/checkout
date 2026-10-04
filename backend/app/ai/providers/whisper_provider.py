@@ -27,7 +27,7 @@ class FasterWhisperProvider(STTProvider):
     async def health_check(self) -> bool:
         return True
 
-    async def transcribe_audio(self, audio_bytes: bytes) -> str:
+    async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
         if not audio_bytes or len(audio_bytes) < 100:
             return ""
 
@@ -53,7 +53,7 @@ class FasterWhisperProvider(STTProvider):
             segments, info = model.transcribe(tmp_path, beam_size=1, language="en", vad_filter=True)
             transcript_parts = [segment.text.strip() for segment in segments]
             transcript = " ".join(transcript_parts).strip()
-            if not transcript:
+            if not transcript and not fast:
                 # Retry without vad_filter in case VAD was too aggressive on short audio slice
                 segments, info = model.transcribe(tmp_path, beam_size=1, language="en", vad_filter=False)
                 transcript_parts = [segment.text.strip() for segment in segments]
@@ -70,7 +70,8 @@ class FasterWhisperProvider(STTProvider):
                     pass
 
         # 2. If faster-whisper returned empty, try Gemini 2.5 Flash Multimodal Audio STT
-        if not transcript and settings.GEMINI_API_KEY:
+        # (skipped in fast/live mode — the next slice or final pass will catch it)
+        if not transcript and not fast and settings.GEMINI_API_KEY:
             try:
                 import base64
                 import httpx

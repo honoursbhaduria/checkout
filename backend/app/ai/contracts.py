@@ -21,8 +21,8 @@ class LLMProvider(ABC):
 
 class STTProvider(ABC):
     @abstractmethod
-    async def transcribe_audio(self, audio_bytes: bytes) -> str:
-        pass
+    async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
+        """Transcribe audio. fast=True = single greedy pass for live slices (speed over accuracy)."""
 
 
 class TTSProvider(ABC):

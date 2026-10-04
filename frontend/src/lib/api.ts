@@ -390,7 +390,7 @@ class ApiClient {
     return this.request<InterviewHistorySummary>("/interviews/history");
   }
 
-  async transcribeAudioFile(audioBlob: Blob): Promise<string> {
+  async transcribeAudioFile(audioBlob: Blob, fast = false): Promise<string> {
     const formData = new FormData();
     formData.append("file", audioBlob, "recording.webm");
     const token = this.getToken();
@@ -398,7 +398,7 @@ class ApiClient {
     if (token) {
       headers["Authorization"] = `Bearer ${token}`;
     }
-    const res = await fetch(`${API_BASE}/voice/transcribe-file`, {
+    const res = await fetch(`${API_BASE}/voice/transcribe-file${fast ? "?fast=true" : ""}`, {
       method: "POST",
       headers,
       body: formData,

@@ -500,7 +500,7 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
         }
 
     # --- Speech to Text ---
-    async def transcribe_audio(self, audio_bytes: bytes) -> str:
+    async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
         # Fallback/simulation text if raw speech bytes sent without Whisper
         return "I built async REST APIs using FastAPI and PostgreSQL, and integrated Redis for caching."
 
