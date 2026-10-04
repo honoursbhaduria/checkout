@@ -21,7 +21,7 @@ export const IndustrialCard: React.FC<IndustrialCardProps> = ({
 }) => {
   return (
     <div
-      className={`relative bg-chassis rounded-lg p-6 ${
+      className={`relative bg-chassis rounded-lg p-4 sm:p-6 ${
         elevated ? "shadow-floating" : "shadow-card"
       } border border-white/40 transition-all duration-300 ${className}`}
     >

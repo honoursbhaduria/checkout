@@ -121,14 +121,14 @@ export const VoiceVisualizer: React.FC<VoiceVisualizerProps> = ({
   }, [isListening, isSpeaking]);
 
   return (
-    <div className="flex flex-col items-center justify-center p-3 bg-white border-2 border-pencil rounded-wobbly shadow-sketchSm">
+    <div className="flex flex-col items-center justify-center p-2.5 sm:p-3 bg-white border-2 border-pencil rounded-lg md:rounded-wobbly shadow-sketchSm">
       <div className="flex items-center gap-2 mb-1">
         {isSpeaking ? (
-          <Volume2 className="w-5 h-5 text-marker animate-pulse" />
+          <Volume2 className="w-5 h-5 text-marker animate-pulse shrink-0" />
         ) : (
-          <Mic className={`w-5 h-5 ${isListening ? "text-pen animate-bounce" : "text-pencil/50"}`} />
+          <Mic className={`w-5 h-5 shrink-0 ${isListening ? "text-pen animate-bounce" : "text-pencil/50"}`} />
         )}
-        <span className="font-heading text-lg font-bold">
+        <span className="font-heading text-base sm:text-lg font-bold text-center">
           {statusText ||
             (isSpeaking
               ? "AI Interviewer Speaking..."

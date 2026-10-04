@@ -488,10 +488,10 @@ export function App() {
           </div>
 
           {/* Stage Buttons */}
-          <nav className="flex items-center gap-2 overflow-x-auto">
+          <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
             <button
               onClick={() => setActiveTab("ingest")}
-              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition ${
+              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer ${
                 activeTab === "ingest"
                   ? "bg-[#2d3436] text-white shadow-sharp"
                   : "bg-chassis text-ink shadow-floating hover:text-safety"
@@ -502,7 +502,7 @@ export function App() {
             <button
               onClick={() => setActiveTab("role")}
               disabled={!job}
-              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
                 activeTab === "role"
                   ? "bg-[#2d3436] text-white shadow-sharp"
                   : "bg-chassis text-ink shadow-floating hover:text-safety"
@@ -513,7 +513,7 @@ export function App() {
             <button
               onClick={() => setActiveTab("fit")}
               disabled={!jobFit}
-              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
                 activeTab === "fit"
                   ? "bg-[#2d3436] text-white shadow-sharp"
                   : "bg-chassis text-ink shadow-floating hover:text-safety"
@@ -524,7 +524,7 @@ export function App() {
             <button
               onClick={() => setActiveTab("interview")}
               disabled={!currentQuestion}
-              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
                 activeTab === "interview"
                   ? "bg-safety text-white shadow-safety"
                   : "bg-chassis text-ink shadow-floating hover:text-safety"
@@ -535,7 +535,7 @@ export function App() {
             <button
               onClick={() => setActiveTab("report")}
               disabled={!report}
-              className={`font-mono text-xs uppercase px-3 py-2 rounded-md mechanical-transition disabled:opacity-40 ${
+              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
                 activeTab === "report"
                   ? "bg-[#10b981] text-white shadow-sharp"
                   : "bg-chassis text-ink shadow-floating hover:text-safety"
@@ -548,7 +548,7 @@ export function App() {
       </header>
 
       {/* Main Console Viewport */}
-      <main className="max-w-7xl mx-auto px-6 pt-8">
+      <main className="max-w-7xl mx-auto px-3 sm:px-6 pt-4 sm:pt-8">
         {error && (
           <div className="mb-6 p-4 bg-[#fee2e2] rounded-lg shadow-sharp border border-safety/60 flex items-center justify-between">
             <div className="flex items-center gap-3">

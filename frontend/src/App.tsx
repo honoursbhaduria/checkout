@@ -513,30 +513,30 @@ export function App() {
   return (
     <div className="min-h-screen pb-16">
       {/* Top Header */}
-      <header className="border-b-[3px] border-pencil bg-white/80 backdrop-blur-sm sticky top-0 z-30 shadow-sketchSm">
-        <div className="max-w-6xl mx-auto px-6 py-4 flex flex-wrap items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-wobbly bg-marker border-2 border-pencil flex items-center justify-center text-white font-heading text-2xl font-bold shadow-sketchSm">
+      <header className="border-b-[3px] border-pencil bg-white/90 backdrop-blur-sm sticky top-0 z-30 shadow-sketchSm">
+        <div className="max-w-6xl mx-auto px-3 sm:px-6 py-3 sm:py-4 flex flex-col md:flex-row items-start md:items-center justify-between gap-3 md:gap-4">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="w-10 h-10 sm:w-11 sm:h-11 rounded-wobbly bg-marker border-2 border-pencil flex items-center justify-center text-white font-heading text-xl sm:text-2xl font-bold shadow-sketchSm shrink-0">
               CK
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h1 className="font-heading text-3xl md:text-4xl font-bold text-pencil leading-none">
+                <h1 className="font-heading text-2xl sm:text-3xl md:text-4xl font-bold text-pencil leading-none">
                   Checkout
                 </h1>
               </div>
-              <p className="font-body text-base text-pencil/70">
+              <p className="font-body text-xs sm:text-base text-pencil/70">
                 Personalized Interview Simulator by Student Credibility
               </p>
             </div>
           </div>
 
           {/* Navigation Tabs */}
-          <nav className="flex items-center gap-2 overflow-x-auto">
+          <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
             <button
               onClick={() => setActiveTab("ingest")}
-              className={`font-body text-lg px-3 py-1 rounded-wobbly border-2 border-pencil transition-all ${
-                activeTab === "ingest" ? "bg-pencil text-white shadow-sketchSm" : "bg-white text-pencil hover:bg-erased"
+              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "ingest" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased"
               }`}
             >
               1. Ingest
@@ -544,8 +544,8 @@ export function App() {
             <button
               onClick={() => setActiveTab("role")}
               disabled={!job}
-              className={`font-body text-lg px-3 py-1 rounded-wobbly border-2 border-pencil transition-all ${
-                activeTab === "role" ? "bg-pencil text-white shadow-sketchSm" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "role" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
               }`}
             >
               2. Role
@@ -553,8 +553,8 @@ export function App() {
             <button
               onClick={() => setActiveTab("fit")}
               disabled={!jobFit}
-              className={`font-body text-lg px-3 py-1 rounded-wobbly border-2 border-pencil transition-all ${
-                activeTab === "fit" ? "bg-pencil text-white shadow-sketchSm" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "fit" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
               }`}
             >
               3. Job Fit
@@ -562,8 +562,8 @@ export function App() {
             <button
               onClick={() => setActiveTab("interview")}
               disabled={!currentQuestion}
-              className={`font-body text-lg px-3 py-1 rounded-wobbly border-2 border-pencil transition-all ${
-                activeTab === "interview" ? "bg-marker text-white shadow-sketchSm" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "interview" ? "bg-marker text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
               }`}
             >
               4. Voice Interview
@@ -571,8 +571,8 @@ export function App() {
             <button
               onClick={() => setActiveTab("report")}
               disabled={!report}
-              className={`font-body text-lg px-3 py-1 rounded-wobbly border-2 border-pencil transition-all ${
-                activeTab === "report" ? "bg-pen text-white shadow-sketchSm" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                activeTab === "report" ? "bg-pen text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
               }`}
             >
               5. Report
@@ -582,14 +582,14 @@ export function App() {
       </header>
 
       {/* Main Container */}
-      <main className="max-w-6xl mx-auto px-6 pt-8">
+      <main className="max-w-6xl mx-auto px-3 sm:px-6 pt-5 sm:pt-8">
         {error && (
-          <div className="mb-6 p-4 bg-[#fee2e2] border-[3px] border-marker rounded-wobbly shadow-sketch flex items-center justify-between">
+          <div className="mb-6 p-3.5 sm:p-4 bg-[#fee2e2] border-[3px] border-marker rounded-xl md:rounded-wobbly shadow-sketch flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="w-6 h-6 text-marker" />
-              <span className="font-body text-xl text-marker font-bold">{error}</span>
+              <AlertTriangle className="w-5 h-5 sm:w-6 sm:h-6 text-marker shrink-0" />
+              <span className="font-body text-base sm:text-xl text-marker font-bold">{error}</span>
             </div>
-            <button onClick={() => setError(null)} className="font-body text-lg text-pencil font-bold">
+            <button onClick={() => setError(null)} className="font-body text-base sm:text-lg text-pencil font-bold shrink-0">
               Dismiss
             </button>
           </div>
@@ -598,16 +598,16 @@ export function App() {
         {/* TAB 1: INGEST */}
         {activeTab === "ingest" && (
           <div>
-            <div className="text-center mb-8">
-              <h2 className="font-heading text-4xl md:text-5xl font-bold text-pencil mb-2">
+            <div className="text-center mb-6 sm:mb-8">
+              <h2 className="font-heading text-2xl sm:text-4xl md:text-5xl font-bold text-pencil mb-2">
                 Prepare for Your Target Job
               </h2>
-              <p className="font-body text-2xl text-pencil/80 max-w-2xl mx-auto">
+              <p className="font-body text-base sm:text-xl md:text-2xl text-pencil/80 max-w-2xl mx-auto">
                 Paste your Job Description and Resume below. The system will analyze requirements, compute your Job Fit, and launch an adaptive AI voice interview!
               </p>
             </div>
 
-            <div className="grid md:grid-cols-2 gap-8 mb-8">
+            <div className="grid md:grid-cols-2 gap-5 sm:gap-8 mb-6 sm:mb-8">
               {/* Job Description Card */}
               <WobblyCard decoration="tape" tilt="-rotate-1">
                 <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b-2 border-dashed border-pencil/30 pb-2">
@@ -651,8 +651,8 @@ export function App() {
                   />
                   {jdInputMode === "upload" ? (
                     <div>
-                      <label className="font-heading text-xl text-pencil block mb-2">Upload JD File (.pdf, .txt, .md, .docx)</label>
-                      <div className="border-[3px] border-dashed border-pen/70 rounded-wobbly p-6 text-center bg-blue-50/40 hover:bg-blue-50/70 transition-all cursor-pointer relative">
+                      <label className="font-heading text-lg sm:text-xl text-pencil block mb-2">Upload JD File (.pdf, .txt, .md, .docx)</label>
+                      <div className="border-[3px] border-dashed border-pen/70 rounded-xl md:rounded-wobbly p-4 sm:p-6 text-center bg-blue-50/40 hover:bg-blue-50/70 transition-all cursor-pointer relative">
                         <input
                           type="file"
                           accept=".pdf,.txt,.md,.docx,.doc"
@@ -729,10 +729,10 @@ export function App() {
 
                   {resumeInputMode === "upload" ? (
                     <div className="space-y-2">
-                      <label className="block font-heading text-xl font-bold text-pencil">
+                      <label className="block font-heading text-lg sm:text-xl font-bold text-pencil">
                         Upload Resume File
                       </label>
-                      <div className="border-[3px] border-dashed border-pencil rounded-wobbly p-6 text-center bg-notebook hover:bg-yellow-50/70 transition-all relative">
+                      <div className="border-[3px] border-dashed border-pencil rounded-xl md:rounded-wobbly p-4 sm:p-6 text-center bg-notebook hover:bg-yellow-50/70 transition-all relative">
                         <input
                           type="file"
                           accept=".pdf,.docx,.doc,.txt"
@@ -789,13 +789,14 @@ export function App() {
                 variant="marker"
                 onClick={handleAnalyzeDocuments}
                 disabled={loading}
+                className="w-full sm:w-auto"
               >
                 {loading ? (
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center justify-center gap-2">
                     <Sparkles className="w-6 h-6 animate-spin" /> Analyzing Role & Resume...
                   </span>
                 ) : (
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center justify-center gap-2">
                     Analyze Role & Calculate Job Fit <ArrowRight className="w-6 h-6" />
                   </span>
                 )}
@@ -807,20 +808,20 @@ export function App() {
         {/* TAB 2: ROLE ANALYSIS */}
         {activeTab === "role" && job && (
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
-                <span className="font-body text-lg uppercase bg-erased border border-pencil px-3 py-1 rounded-full">
+                <span className="font-body text-sm sm:text-lg uppercase bg-erased border border-pencil px-3 py-1 rounded-full">
                   Step 1 — Understand The Role
                 </span>
-                <h2 className="font-heading text-4xl font-bold text-pencil mt-2">
+                <h2 className="font-heading text-2xl sm:text-4xl font-bold text-pencil mt-2">
                   {job.analysis?.role_title || job.title}
                 </h2>
-                <p className="font-body text-xl text-pencil/70">
+                <p className="font-body text-base sm:text-xl text-pencil/70">
                   Target Seniority: <strong className="uppercase">{job.analysis?.seniority}</strong> • Analyzed from Job Description
                 </p>
               </div>
 
-              <WobblyButton size="md" variant="pen" onClick={() => setActiveTab("fit")}>
+              <WobblyButton size="md" variant="pen" onClick={() => setActiveTab("fit")} className="w-full sm:w-auto">
                 View Candidate Job Fit <ChevronRight className="w-5 h-5 inline" />
               </WobblyButton>
             </div>
@@ -900,29 +901,29 @@ export function App() {
         {/* TAB 3: JOB FIT */}
         {activeTab === "fit" && jobFit && (
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
               <div>
-                <span className="font-body text-lg uppercase bg-erased border border-pencil px-3 py-1 rounded-full">
+                <span className="font-body text-sm sm:text-lg uppercase bg-erased border border-pencil px-3 py-1 rounded-full">
                   Step 2 — Understand The Candidate
                 </span>
-                <h2 className="font-heading text-4xl font-bold text-pencil mt-2">
+                <h2 className="font-heading text-2xl sm:text-4xl font-bold text-pencil mt-2">
                   Explainable Job Fit Analysis
                 </h2>
-                <p className="font-body text-xl text-pencil/70">
+                <p className="font-body text-base sm:text-xl text-pencil/70">
                   Hybrid deterministic evaluation with verifiable evidence mapping
                 </p>
               </div>
 
-              <WobblyButton size="lg" variant="marker" onClick={handleStartInterview}>
+              <WobblyButton size="lg" variant="marker" onClick={handleStartInterview} className="w-full sm:w-auto">
                 Start AI Voice Interview <Play className="w-5 h-5 inline fill-white" />
               </WobblyButton>
             </div>
 
             {/* Score Banner */}
-            <div className="mb-8 p-6 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketch flex flex-col md:flex-row items-center justify-between gap-6">
+            <div className="mb-8 p-4 sm:p-6 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="text-center md:text-left">
-                <span className="font-body text-2xl text-pencil/80">Overall Match</span>
-                <div className="font-heading text-6xl md:text-7xl font-bold text-pencil mt-1">
+                <span className="font-body text-xl sm:text-2xl text-pencil/80">Overall Match</span>
+                <div className="font-heading text-5xl sm:text-6xl md:text-7xl font-bold text-pencil mt-1">
                   {jobFit.overall_score}%
                 </div>
               </div>
@@ -1009,15 +1010,15 @@ export function App() {
             </div>
 
             {/* Qdrant Vector DB & Chunk Ingestion Verification Panel (At the end of the page) */}
-            <div className="mb-8 p-5 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketch">
+            <div className="mb-8 p-4 sm:p-5 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-wobbly bg-[#10b981]/15 border-2 border-[#10b981] flex items-center justify-center text-[#10b981]">
+                  <div className="w-10 h-10 rounded-lg md:rounded-wobbly bg-[#10b981]/15 border-2 border-[#10b981] flex items-center justify-center text-[#10b981] shrink-0">
                     <Database className="w-5 h-5" />
                   </div>
                   <div>
-                    <div className="flex items-center gap-2">
-                      <h3 className="font-heading text-2xl font-bold text-pencil">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="font-heading text-xl sm:text-2xl font-bold text-pencil">
                         Qdrant Cloud Vector Storage
                       </h3>
                       <span className="flex items-center gap-1.5 text-xs bg-[#10b981]/15 text-[#047857] border border-[#10b981] px-2.5 py-0.5 rounded-full font-bold">
@@ -1025,13 +1026,13 @@ export function App() {
                         Active &amp; Queryable
                       </span>
                     </div>
-                    <p className="font-body text-base text-pencil/70">
-                      Collections: <code className="bg-erased px-1.5 py-0.5 rounded text-sm font-mono border border-pencil/20">resume_chunks</code> &amp; <code className="bg-erased px-1.5 py-0.5 rounded text-sm font-mono border border-pencil/20">resume_claims</code> • 384-dimensional embeddings
+                    <p className="font-body text-xs sm:text-base text-pencil/70">
+                      Collections: <code className="bg-erased px-1 py-0.5 rounded text-xs font-mono border border-pencil/20">resume_chunks</code> &amp; <code className="bg-erased px-1 py-0.5 rounded text-xs font-mono border border-pencil/20">resume_claims</code> • 384-dimensional embeddings
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-3 w-full sm:w-auto justify-end">
                   {resume?.file_url && (
                     <div className="hidden sm:flex items-center gap-1.5 bg-erased px-3 py-1 rounded-wobbly border border-pencil text-xs font-mono text-pencil/80">
                       <HardDrive className="w-3.5 h-3.5 text-marker" />
@@ -1041,7 +1042,7 @@ export function App() {
                   <button
                     type="button"
                     onClick={() => setShowChunksDrawer(!showChunksDrawer)}
-                    className="flex items-center gap-1.5 font-heading text-lg bg-pencil text-white px-4 py-1.5 rounded-wobbly border-2 border-pencil hover:bg-pencil/90 transition-all cursor-pointer shadow-sketchSm"
+                    className="w-full sm:w-auto flex items-center justify-center gap-1.5 font-heading text-base sm:text-lg bg-pencil text-white px-3.5 sm:px-4 py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil hover:bg-pencil/90 transition-all cursor-pointer shadow-sketchSm"
                   >
                     <Layers className="w-4 h-4 text-white" />
                     <span>
@@ -1097,63 +1098,59 @@ export function App() {
         {activeTab === "interview" && currentQuestion && (
           <div>
             {/* Round Level Progress Bar */}
-            <div className="mb-6 p-4 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketch flex flex-wrap items-center justify-between gap-4">
+            <div className="mb-6 p-3 sm:p-4 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
               <div className="flex items-center gap-3">
-                <span className="w-9 h-9 rounded-full bg-pencil text-white flex items-center justify-center font-heading text-xl font-bold">
+                <span className="w-9 h-9 rounded-full bg-pencil text-white flex items-center justify-center font-heading text-lg sm:text-xl font-bold shrink-0">
                   Q{currentQuestion.sequence}
                 </span>
                 <div>
-                  <span className="font-body text-sm uppercase tracking-wider text-pencil/70">
+                  <span className="font-body text-xs sm:text-sm uppercase tracking-wider text-pencil/70">
                     Current Stage
                   </span>
-                  <div className="font-heading text-2xl font-bold capitalize text-marker">
+                  <div className="font-heading text-xl sm:text-2xl font-bold capitalize text-marker">
                     {currentQuestion.level.replace("_", " ")} Round
                   </div>
                 </div>
               </div>
 
-              {/* Progress Tracker */}
-              <div className="flex items-center gap-2">
-                <span className="font-body text-lg font-bold">
-                  Difficulty: {currentQuestion.question.difficulty} / 10
-                </span>
-                <span className="mx-2">•</span>
-                <span className="font-body text-lg">
-                  Progress: {currentQuestion.state.progress_percent}%
-                </span>
-              </div>
-
-              {/* Audio Controls */}
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setTtsEnabled(!ttsEnabled)}
-                  className="p-2 border-2 border-pencil rounded-wobbly hover:bg-erased transition-all"
-                  title="Toggle TTS Voice"
-                >
-                  {ttsEnabled ? <Volume2 className="w-5 h-5 text-pencil" /> : <VolumeX className="w-5 h-5 text-marker" />}
-                </button>
-                <WobblyButton size="sm" variant="danger" onClick={handleFinishInterview}>
-                  Finish Interview
-                </WobblyButton>
+              {/* Progress & Audio Controls */}
+              <div className="flex flex-wrap items-center justify-between sm:justify-end gap-3">
+                <div className="flex items-center gap-2 font-body text-sm sm:text-base">
+                  <span>Diff: <strong>{currentQuestion.question.difficulty}/10</strong></span>
+                  <span>•</span>
+                  <span>Progress: <strong>{currentQuestion.state.progress_percent}%</strong></span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setTtsEnabled(!ttsEnabled)}
+                    className="p-1.5 sm:p-2 border-2 border-pencil rounded-lg md:rounded-wobbly hover:bg-erased transition-all"
+                    title="Toggle TTS Voice"
+                  >
+                    {ttsEnabled ? <Volume2 className="w-5 h-5 text-pencil" /> : <VolumeX className="w-5 h-5 text-marker" />}
+                  </button>
+                  <WobblyButton size="sm" variant="danger" onClick={handleFinishInterview}>
+                    Finish Interview
+                  </WobblyButton>
+                </div>
               </div>
             </div>
 
             <div className="grid md:grid-cols-3 gap-6 mb-8">
               {/* Left Column: AI Persona & Video Feed */}
-              <div className="space-y-4">
+              <div className="space-y-4 order-2 md:order-1">
                 <WobblyCard decoration="tape" tilt="-rotate-1">
                   <div className="flex flex-col items-center text-center">
                     {/* Hand-Drawn AI Avatar */}
-                    <div className="relative w-28 h-28 rounded-wobbly bg-erased border-[3px] border-pencil flex items-center justify-center shadow-sketchSm mb-3">
-                      <span className="font-heading text-5xl">🤖</span>
+                    <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-wobbly bg-erased border-[3px] border-pencil flex items-center justify-center shadow-sketchSm mb-3">
+                      <span className="font-heading text-4xl sm:text-5xl">🤖</span>
                       {isSpeakingQuestion && (
                         <div className="absolute -bottom-2 bg-marker text-white text-xs px-2 py-0.5 rounded-full border border-pencil animate-pulse font-heading">
                           Speaking
                         </div>
                       )}
                     </div>
-                    <h3 className="font-heading text-2xl font-bold">AI Technical Interviewer</h3>
-                    <p className="font-body text-base text-pencil/70">
+                    <h3 className="font-heading text-xl sm:text-2xl font-bold">AI Technical Interviewer</h3>
+                    <p className="font-body text-xs sm:text-base text-pencil/70">
                       Adaptive Evaluator • Student Credibility
                     </p>
                   </div>
@@ -1178,19 +1175,19 @@ export function App() {
               </div>
 
               {/* Right Columns: Question & Candidate Answer */}
-              <div className="md:col-span-2 space-y-6">
+              <div className="md:col-span-2 space-y-6 order-1 md:order-2">
                 {/* Interviewer Speech Bubble */}
                 <SpeechBubble speaker="AI Interviewer" isAI={true}>
-                  <p className="text-2xl font-body leading-relaxed text-pencil">
+                  <p className="text-lg sm:text-2xl font-body leading-relaxed text-pencil">
                     {currentQuestion.question.text}
                   </p>
-                  <div className="mt-3 flex items-center gap-2 pt-2 border-t border-dashed border-pencil/20">
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-pencil/20">
                     <span className="text-xs bg-pen text-white px-2 py-0.5 rounded-full font-body uppercase">
                       Target: {currentQuestion.question.competency}
                     </span>
                     <button
                       onClick={() => speakText(currentQuestion.question.text)}
-                      className="text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
+                      className="text-xs sm:text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-2.5 sm:px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
                       title="Play question audio with AI voice and chime"
                     >
                       <Volume2 className="w-4 h-4 text-marker group-hover:text-white" /> Listen to AI Voice
@@ -1228,13 +1225,14 @@ export function App() {
                     placeholder="Click 'Speak via Microphone' to answer aloud, or use 'Quick Voice Sample', or type your answer here..."
                   />
 
-                  <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
-                    <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-4">
+                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
                       <WobblyButton
                         variant={isListeningMic ? "danger" : "secondary"}
                         onClick={toggleMicListening}
+                        className="w-full sm:w-auto"
                       >
-                        <span className="flex items-center gap-2">
+                        <span className="flex items-center justify-center gap-2">
                           <Mic className={`w-5 h-5 ${isListeningMic ? "animate-bounce text-white" : ""}`} />
                           {isListeningMic ? "Stop Speaking" : "Speak via Microphone"}
                         </span>
@@ -1245,8 +1243,9 @@ export function App() {
                         size="sm"
                         onClick={handleQuickVoiceSample}
                         title="Auto-fill candidate voice answer tailored to this question"
+                        className="w-full sm:w-auto"
                       >
-                        <span className="flex items-center gap-1.5 text-pencil">
+                        <span className="flex items-center justify-center gap-1.5 text-pencil">
                           <Sparkles className="w-4 h-4 text-marker" /> Quick Voice Sample
                         </span>
                       </WobblyButton>
@@ -1256,6 +1255,7 @@ export function App() {
                       variant="primary"
                       onClick={handleSubmitAnswer}
                       disabled={loading || !candidateAnswer.trim()}
+                      className="w-full sm:w-auto"
                     >
                       {loading ? "Evaluating Answer..." : "Submit Answer & Continue"}
                     </WobblyButton>
@@ -1264,19 +1264,19 @@ export function App() {
 
                 {/* Immediate Feedback for previous answer if present */}
                 {latestEvaluation && (
-                  <div className="p-5 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketch animate-fadeIn">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-heading text-xl font-bold text-pencil">
+                  <div className="p-4 sm:p-5 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2">
+                      <span className="font-heading text-lg sm:text-xl font-bold text-pencil">
                         Answer Evaluation: {latestEvaluation.assessment}
                       </span>
-                      <span className="font-heading text-2xl font-bold text-marker">
+                      <span className="font-heading text-xl sm:text-2xl font-bold text-marker">
                         {latestEvaluation.overall_score} / 10
                       </span>
                     </div>
-                    <p className="font-body text-lg text-pencil/90">
+                    <p className="font-body text-base sm:text-lg text-pencil/90">
                       <strong>Strength:</strong> {latestEvaluation.strengths[0] || "Solid answer."}
                     </p>
-                    <p className="font-body text-lg text-marker mt-1">
+                    <p className="font-body text-base sm:text-lg text-marker mt-1">
                       <strong>Follow-up Focus:</strong> {latestEvaluation.follow_up_reason}
                     </p>
                   </div>
@@ -1289,24 +1289,24 @@ export function App() {
         {/* TAB 5: FINAL REPORT & READINESS */}
         {activeTab === "report" && report && (
           <div>
-            <div className="text-center mb-8">
-              <span className="font-body text-xl uppercase bg-erased border border-pencil px-4 py-1 rounded-full">
+            <div className="text-center mb-6 sm:mb-8">
+              <span className="font-body text-sm sm:text-xl uppercase bg-erased border border-pencil px-3 sm:px-4 py-1 rounded-full">
                 Step 4 — Final Performance Report
               </span>
-              <h2 className="font-heading text-5xl font-bold text-pencil mt-2 mb-2">
+              <h2 className="font-heading text-3xl sm:text-5xl font-bold text-pencil mt-2 mb-2">
                 Interview Performance & Readiness
               </h2>
-              <p className="font-body text-2xl text-pencil/80 max-w-xl mx-auto">
+              <p className="font-body text-base sm:text-2xl text-pencil/80 max-w-xl mx-auto">
                 Comprehensive evaluation calibrated against the target role requirements
               </p>
             </div>
 
             {/* Official Readiness Seal Card */}
-            <div className="mb-10 p-8 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketchLg flex flex-col md:flex-row items-center justify-around text-center md:text-left gap-6">
+            <div className="mb-8 sm:mb-10 p-5 sm:p-8 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketchLg flex flex-col md:flex-row items-center justify-around text-center md:text-left gap-6">
               <div>
-                <span className="font-body text-2xl text-pencil/80">Overall Interview Score</span>
-                <div className="font-heading text-7xl font-bold text-pencil">
-                  {report.overall_score} <span className="text-3xl text-pencil/50">/ 100</span>
+                <span className="font-body text-lg sm:text-2xl text-pencil/80">Overall Interview Score</span>
+                <div className="font-heading text-5xl sm:text-7xl font-bold text-pencil mt-1">
+                  {report.overall_score} <span className="text-2xl sm:text-3xl text-pencil/50">/ 100</span>
                 </div>
               </div>
 
@@ -1319,11 +1319,11 @@ export function App() {
             </div>
 
             {/* Competency Scores Grid */}
-            <div className="mb-10">
-              <h3 className="font-heading text-3xl font-bold text-pencil mb-4">
+            <div className="mb-8 sm:mb-10">
+              <h3 className="font-heading text-2xl sm:text-3xl font-bold text-pencil mb-4">
                 Competency Evaluation Rubric
               </h3>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
                 {[
                   { label: "Role Fit", val: report.role_fit },
                   { label: "Technical Knowledge", val: report.technical_knowledge },
@@ -1334,9 +1334,9 @@ export function App() {
                   { label: "Behavioural Fit", val: report.behavioral_fit },
                   { label: "Overall Average", val: report.overall_score },
                 ].map((comp, i) => (
-                  <div key={i} className="p-4 bg-white border-2 border-pencil rounded-wobbly shadow-sketchSm">
-                    <span className="font-body text-base text-pencil/70 block">{comp.label}</span>
-                    <span className="font-heading text-3xl font-bold text-pencil">{comp.val}%</span>
+                  <div key={i} className="p-3 sm:p-4 bg-white border-2 border-pencil rounded-lg sm:rounded-wobbly shadow-sketchSm">
+                    <span className="font-body text-xs sm:text-base text-pencil/70 block">{comp.label}</span>
+                    <span className="font-heading text-2xl sm:text-3xl font-bold text-pencil">{comp.val}%</span>
                   </div>
                 ))}
               </div>
@@ -1368,46 +1368,46 @@ export function App() {
             </div>
 
             {/* Question-Level Feedback */}
-            <div className="mb-10">
-              <h3 className="font-heading text-3xl font-bold text-pencil mb-4">
+            <div className="mb-8 sm:mb-10">
+              <h3 className="font-heading text-2xl sm:text-3xl font-bold text-pencil mb-4">
                 Question-Level Feedback
               </h3>
               <div className="space-y-4">
                 {report.question_feedback.map((q, i) => (
-                  <div key={i} className="p-6 bg-white border-2 border-pencil rounded-wobblyMd shadow-sketch">
-                    <div className="flex items-center justify-between mb-2 border-b border-dashed border-pencil/20 pb-2">
-                      <span className="font-heading text-xl font-bold text-pencil">
+                  <div key={i} className="p-4 sm:p-6 bg-white border-2 border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2 border-b border-dashed border-pencil/20 pb-2">
+                      <span className="font-heading text-base sm:text-xl font-bold text-pencil">
                         Question {q.sequence}: {q.question_text}
                       </span>
-                      <span className="text-xs font-heading font-bold bg-marker text-white px-2 py-0.5 rounded-full border border-pencil">
+                      <span className="self-start sm:self-auto text-xs font-heading font-bold bg-marker text-white px-2.5 py-0.5 rounded-full border border-pencil shrink-0">
                         {q.assessment}
                       </span>
                     </div>
 
-                    <p className="font-body text-lg text-pencil/80 mb-2">
+                    <p className="font-body text-sm sm:text-lg text-pencil/80 mb-2">
                       <strong>Your Answer:</strong> "{q.candidate_answer}"
                     </p>
 
                     <div className="grid sm:grid-cols-2 gap-3 mt-3 pt-2 border-t border-dashed border-pencil/20">
                       <div>
-                        <span className="font-heading text-base font-bold text-[#10b981] block">
+                        <span className="font-heading text-sm sm:text-base font-bold text-[#10b981] block">
                           What Was Good:
                         </span>
-                        <p className="font-body text-base text-pencil">{q.what_was_good}</p>
+                        <p className="font-body text-sm sm:text-base text-pencil">{q.what_was_good}</p>
                       </div>
                       <div>
-                        <span className="font-heading text-base font-bold text-marker block">
+                        <span className="font-heading text-sm sm:text-base font-bold text-marker block">
                           What Could Be Better:
                         </span>
-                        <p className="font-body text-base text-pencil">{q.what_could_be_better}</p>
+                        <p className="font-body text-sm sm:text-base text-pencil">{q.what_could_be_better}</p>
                       </div>
                     </div>
 
-                    <div className="mt-2 p-2.5 bg-erased/40 rounded-wobbly border border-pencil/30">
-                      <span className="font-heading text-base font-bold text-pen block">
+                    <div className="mt-2 p-2.5 bg-erased/40 rounded-lg md:rounded-wobbly border border-pencil/30">
+                      <span className="font-heading text-sm sm:text-base font-bold text-pen block">
                         Ideal Direction:
                       </span>
-                      <p className="font-body text-base text-pencil">{q.ideal_direction}</p>
+                      <p className="font-body text-sm sm:text-base text-pencil">{q.ideal_direction}</p>
                     </div>
                   </div>
                 ))}

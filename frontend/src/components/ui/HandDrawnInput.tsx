@@ -14,17 +14,17 @@ export const HandDrawnInput: React.FC<HandDrawnInputProps> = ({
   return (
     <div className="w-full">
       {label && (
-        <label className="block font-heading text-xl text-pencil mb-1">
+        <label className="block font-heading text-lg sm:text-xl text-pencil mb-1">
           {label}
         </label>
       )}
       <input
-        className={`w-full font-body text-xl px-4 py-2 bg-white text-pencil border-2 border-pencil rounded-wobbly shadow-sketchSm
+        className={`w-full font-body text-base sm:text-xl px-3 sm:px-4 py-2 bg-white text-pencil border-2 border-pencil rounded-lg sm:rounded-wobbly shadow-sketchSm
           outline-none focus:border-pen focus:ring-2 focus:ring-pen/20 transition-all placeholder:text-pencil/40 ${className}`}
         {...props}
       />
       {error && (
-        <p className="font-body text-base text-marker mt-1">{error}</p>
+        <p className="font-body text-sm sm:text-base text-marker mt-1">{error}</p>
       )}
     </div>
   );
@@ -44,17 +44,17 @@ export const HandDrawnTextarea: React.FC<HandDrawnTextareaProps> = ({
   return (
     <div className="w-full">
       {label && (
-        <label className="block font-heading text-xl text-pencil mb-1">
+        <label className="block font-heading text-lg sm:text-xl text-pencil mb-1">
           {label}
         </label>
       )}
       <textarea
-        className={`w-full font-body text-xl px-4 py-3 bg-white text-pencil border-2 border-pencil rounded-wobblyMd shadow-sketchSm
+        className={`w-full font-body text-base sm:text-xl px-3 sm:px-4 py-2.5 sm:py-3 bg-white text-pencil border-2 border-pencil rounded-lg sm:rounded-wobblyMd shadow-sketchSm
           outline-none focus:border-pen focus:ring-2 focus:ring-pen/20 transition-all placeholder:text-pencil/40 resize-y no-scrollbar ${className}`}
         {...props}
       />
       {error && (
-        <p className="font-body text-base text-marker mt-1">{error}</p>
+        <p className="font-body text-sm sm:text-base text-marker mt-1">{error}</p>
       )}
     </div>
   );

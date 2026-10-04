@@ -26,11 +26,11 @@ export const SpeechBubble: React.FC<SpeechBubbleProps> = ({
         )}
       </div>
       <div
-        className={`relative border-[3px] border-pencil rounded-wobblyMd p-5 shadow-sketch ${
+        className={`relative border-[3px] border-pencil rounded-xl md:rounded-wobblyMd p-3.5 sm:p-5 shadow-sketch ${
           isAI ? "bg-white" : "bg-[#f5f0e6]"
         }`}
       >
-        <div className="font-body text-xl text-pencil leading-relaxed">
+        <div className="font-body text-base sm:text-xl text-pencil leading-relaxed">
           {children}
         </div>
       </div>

@@ -202,7 +202,7 @@ export const VideoCamera: React.FC<VideoCameraProps> = ({ onStreamActive }) => {
 
   return (
     <div className="flex flex-col items-center">
-      <div className="relative w-full max-w-[280px] h-[190px] bg-[#f0ede6] border-2 border-pencil rounded-wobblyMd overflow-hidden shadow-sketchSm flex items-center justify-center">
+      <div className="relative w-full max-w-[280px] h-[190px] bg-[#f0ede6] border-2 border-pencil rounded-xl md:rounded-wobblyMd overflow-hidden shadow-sketchSm flex items-center justify-center">
         {/* Hidden canvas for video generation */}
         <canvas ref={canvasRef} width={280} height={190} className="hidden" />
 

@@ -13,9 +13,9 @@ export const WobblyButton: React.FC<WobblyButtonProps> = ({
   ...props
 }) => {
   const sizeStyles = {
-    sm: "px-3 py-1 text-base",
-    md: "px-5 py-2 text-xl",
-    lg: "px-8 py-3 text-2xl font-bold",
+    sm: "px-2.5 sm:px-3 py-1 sm:py-1.5 text-sm sm:text-base min-h-[38px] inline-flex items-center justify-center",
+    md: "px-3.5 sm:px-5 py-1.5 sm:py-2 text-base sm:text-xl min-h-[42px] inline-flex items-center justify-center",
+    lg: "px-5 sm:px-8 py-2.5 sm:py-3 text-lg sm:text-2xl font-bold min-h-[48px] inline-flex items-center justify-center",
   };
 
   const variantStyles = {

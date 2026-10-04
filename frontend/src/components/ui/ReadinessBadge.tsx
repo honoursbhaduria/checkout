@@ -42,13 +42,13 @@ export const ReadinessBadge: React.FC<ReadinessBadgeProps> = ({
 
   return (
     <div
-      className={`inline-flex flex-col items-center justify-center border-4 border-dashed rounded-full px-8 py-3 rotate-2 shadow-sketch ${current.border} ${current.bg} ${className}`}
+      className={`inline-flex flex-col items-center justify-center border-4 border-dashed rounded-full px-5 sm:px-8 py-2 sm:py-3 rotate-0 md:rotate-2 shadow-sketch ${current.border} ${current.bg} ${className}`}
     >
-      <span className={`font-heading text-3xl font-bold tracking-wider uppercase ${current.text}`}>
+      <span className={`font-heading text-xl sm:text-3xl font-bold tracking-wider uppercase text-center ${current.text}`}>
         {current.label}
       </span>
       {score !== undefined && (
-        <span className="font-body text-xl font-bold text-pencil mt-0.5">
+        <span className="font-body text-base sm:text-xl font-bold text-pencil mt-0.5">
           Readiness Score: {score} / 100
         </span>
       )}
