@@ -1275,22 +1275,9 @@ export function App() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6">
-              {/* Left Column: Instruments */}
-              <div className="space-y-6">
-                <IndustrialMonitor />
-                {/* Audio Wave Spectrum (Hidden on mobile view, visible only on desktop) */}
-                <div className="hidden md:block">
-                  <OscilloscopeWave
-                    isListening={isListeningMic}
-                    isSpeaking={isSpeakingQuestion}
-                  />
-                </div>
-              </div>
-
-              {/* Right Column: Question Terminal & Answer */}
-              <div className="md:col-span-2 space-y-6">
-                {/* CRT Terminal Screen for Question */}
+            <div className="flex flex-col md:grid md:grid-cols-3 gap-6 items-start">
+              {/* 1. CRT Terminal Screen for Question (Order-1 on mobile) */}
+              <div className="order-1 md:col-start-2 md:col-span-2 md:row-start-1 w-full">
                 <div className="p-6 bg-[#1e272e] rounded-lg shadow-recessed border border-[#1e272e] relative overflow-hidden">
                   <div className="flex items-center justify-between mb-3 border-b border-[#34495e] pb-2">
                     <span className="font-mono text-xs text-[#2ed573] font-bold uppercase tracking-wider flex items-center gap-2">
@@ -1315,8 +1302,22 @@ export function App() {
 
                   <div className="absolute inset-0 crt-scanlines pointer-events-none" />
                 </div>
+              </div>
 
-                {/* Candidate Transmission Slot */}
+              {/* 2. Optical Sensor & Instruments (Order-2 on mobile) */}
+              <div className="order-2 md:col-start-1 md:col-span-1 md:row-start-1 md:row-span-2 space-y-6 w-full">
+                <IndustrialMonitor />
+                {/* Audio Wave Spectrum (Hidden on mobile view, visible only on desktop) */}
+                <div className="hidden md:block">
+                  <OscilloscopeWave
+                    isListening={isListeningMic}
+                    isSpeaking={isSpeakingQuestion}
+                  />
+                </div>
+              </div>
+
+              {/* 3. Candidate Transmission Slot (Order-3 on mobile) */}
+              <div className="order-3 md:col-start-2 md:col-span-2 md:row-start-2 space-y-6 w-full">
                 <IndustrialCard title="03 // CANDIDATE TRANSMISSION" subtitle="AUDIO STT OR DIRECT DATA ENTRY">
                   {isListeningMic && (
                     <div className="flex items-center gap-2 p-2.5 bg-[#2ed573]/15 border border-[#2ed573]/40 rounded-md text-ink font-mono text-xs animate-pulse mb-3">

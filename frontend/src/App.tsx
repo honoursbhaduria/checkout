@@ -1306,9 +1306,9 @@ export function App() {
               </div>
             </div>
 
-            <div className="grid md:grid-cols-3 gap-6 mb-8">
-              {/* Left Column: AI Persona & Video Feed */}
-              <div className="space-y-4 order-2 md:order-1">
+            <div className="flex flex-col md:grid md:grid-cols-3 gap-6 mb-8 items-start">
+              {/* 1. FIRST: AI Technical Interviewer (Avatar & Persona Card) */}
+              <div className="order-1 md:col-start-1 md:col-span-1 md:row-start-1 w-full">
                 <WobblyCard decoration="tape" tilt="-rotate-1">
                   <div className="flex flex-col items-center text-center">
                     {/* Hand-Drawn AI Avatar */}
@@ -1326,8 +1326,31 @@ export function App() {
                     </p>
                   </div>
                 </WobblyCard>
+              </div>
 
-                {/* Video Camera (Bonus) */}
+              {/* 2. THEN: AI Interviewer (Speech Bubble Question) */}
+              <div className="order-2 md:col-start-2 md:col-span-2 md:row-start-1 w-full">
+                <SpeechBubble speaker="AI Interviewer" isAI={true}>
+                  <p className="text-lg sm:text-2xl font-body leading-relaxed text-pencil">
+                    {currentQuestion.question.text}
+                  </p>
+                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-pencil/20">
+                    <span className="text-xs bg-pen text-white px-2 py-0.5 rounded-full font-body uppercase">
+                      Target: {currentQuestion.question.competency}
+                    </span>
+                    <button
+                      onClick={() => speakText(currentQuestion.question.text)}
+                      className="text-xs sm:text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-2.5 sm:px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
+                      title="Play question audio with AI voice and chime"
+                    >
+                      <Volume2 className="w-4 h-4 text-marker group-hover:text-white" /> Listen to AI Voice
+                    </button>
+                  </div>
+                </SpeechBubble>
+              </div>
+
+              {/* 3. THEN: Camera Section (Video Camera & Desktop Voice Visualizer) */}
+              <div className="order-3 md:col-start-1 md:col-span-1 md:row-start-2 space-y-4 w-full">
                 <VideoCamera />
 
                 {/* Voice Visualizer (Hidden on mobile view, visible only on desktop) */}
@@ -1347,27 +1370,8 @@ export function App() {
                 </div>
               </div>
 
-              {/* Right Columns: Question & Candidate Answer */}
-              <div className="md:col-span-2 space-y-6 order-1 md:order-2">
-                {/* Interviewer Speech Bubble */}
-                <SpeechBubble speaker="AI Interviewer" isAI={true}>
-                  <p className="text-lg sm:text-2xl font-body leading-relaxed text-pencil">
-                    {currentQuestion.question.text}
-                  </p>
-                  <div className="mt-3 flex flex-wrap items-center gap-2 pt-2 border-t border-dashed border-pencil/20">
-                    <span className="text-xs bg-pen text-white px-2 py-0.5 rounded-full font-body uppercase">
-                      Target: {currentQuestion.question.competency}
-                    </span>
-                    <button
-                      onClick={() => speakText(currentQuestion.question.text)}
-                      className="text-xs sm:text-base font-body bg-white hover:bg-marker hover:text-white text-pencil px-2.5 sm:px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none"
-                      title="Play question audio with AI voice and chime"
-                    >
-                      <Volume2 className="w-4 h-4 text-marker group-hover:text-white" /> Listen to AI Voice
-                    </button>
-                  </div>
-                </SpeechBubble>
-
+              {/* 4. THEN: Your Response & Immediate Feedback */}
+              <div className="order-4 md:col-start-2 md:col-span-2 md:row-start-2 space-y-6 w-full">
                 {/* Candidate Response Section */}
                 <WobblyCard decoration="tack" tilt="rotate-1">
                   <div className="flex items-center justify-between mb-3 border-b-2 border-dashed border-pencil/30 pb-2">
