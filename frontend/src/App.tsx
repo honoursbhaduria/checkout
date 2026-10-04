@@ -697,7 +697,68 @@ export function App() {
               </div>
             </div>
 
-            {/* Qdrant Vector DB & Chunk Ingestion Verification Panel */}
+            {/* Evidence Breakdown Grid */}
+            <div className="grid md:grid-cols-2 gap-6 mb-8">
+              {/* Strong Matches with Evidence */}
+              <WobblyCard decoration="tape" tilt="-rotate-1">
+                <div className="flex items-center gap-2 mb-3 border-b-2 border-dashed border-pencil/30 pb-2">
+                  <CheckCircle2 className="w-6 h-6 text-[#10b981]" />
+                  <h3 className="font-heading text-2xl font-bold">Strong Matches (Verified)</h3>
+                </div>
+                <div className="space-y-4">
+                  {jobFit.matches.map((m, i) => (
+                    <div key={i} className="p-3 bg-white border border-pencil rounded-wobbly shadow-sketchSm">
+                      <div className="font-heading text-xl font-bold text-pencil">{m.skill}</div>
+                      <p className="font-body text-base text-pencil/80 mt-1">
+                        <strong>JD:</strong> {m.jd_evidence}
+                      </p>
+                      <p className="font-body text-base text-pen mt-1">
+                        <strong>Resume:</strong> {m.resume_evidence}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </WobblyCard>
+
+              {/* Partial & Missing Gaps */}
+              <WobblyCard decoration="tack" tilt="rotate-1">
+                <div className="flex items-center gap-2 mb-3 border-b-2 border-dashed border-pencil/30 pb-2">
+                  <AlertTriangle className="w-6 h-6 text-marker" />
+                  <h3 className="font-heading text-2xl font-bold">Partial Matches & Missing Gaps</h3>
+                </div>
+                <div className="space-y-4">
+                  {jobFit.partial_matches.map((p, i) => (
+                    <div key={i} className="p-3 bg-[#fff9c4]/60 border border-pencil rounded-wobbly">
+                      <div className="flex justify-between items-center">
+                        <span className="font-heading text-lg font-bold text-pencil">{p.skill}</span>
+                        <span className="text-xs bg-[#f59e0b] text-white px-2 py-0.5 rounded-full border border-pencil">
+                          PARTIAL
+                        </span>
+                      </div>
+                      <p className="font-body text-base text-marker mt-1">
+                        <strong>Gap:</strong> {p.gap}
+                      </p>
+                    </div>
+                  ))}
+
+                  {jobFit.missing_skills.map((m, i) => (
+                    <div key={i} className="p-3 bg-marker/10 border border-marker rounded-wobbly">
+                      <div className="flex justify-between items-center">
+                        <span className="font-heading text-lg font-bold text-marker">{m.skill}</span>
+                        <span className="text-xs bg-marker text-white px-2 py-0.5 rounded-full border border-pencil">
+                          MISSING
+                        </span>
+                      </div>
+                      <p className="font-body text-base text-pencil/80 mt-1">
+                        High priority competency to review prior to the interview.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </WobblyCard>
+            </div>
+
+            {/* Qdrant Vector DB & Chunk Ingestion Verification Panel (At the end of the page) */}
             <div className="mb-8 p-5 bg-white border-[3px] border-pencil rounded-wobblyMd shadow-sketch">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -778,67 +839,6 @@ export function App() {
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Evidence Breakdown Grid */}
-            <div className="grid md:grid-cols-2 gap-6 mb-8">
-              {/* Strong Matches with Evidence */}
-              <WobblyCard decoration="tape" tilt="-rotate-1">
-                <div className="flex items-center gap-2 mb-3 border-b-2 border-dashed border-pencil/30 pb-2">
-                  <CheckCircle2 className="w-6 h-6 text-[#10b981]" />
-                  <h3 className="font-heading text-2xl font-bold">Strong Matches (Verified)</h3>
-                </div>
-                <div className="space-y-4">
-                  {jobFit.matches.map((m, i) => (
-                    <div key={i} className="p-3 bg-white border border-pencil rounded-wobbly shadow-sketchSm">
-                      <div className="font-heading text-xl font-bold text-pencil">{m.skill}</div>
-                      <p className="font-body text-base text-pencil/80 mt-1">
-                        <strong>JD:</strong> {m.jd_evidence}
-                      </p>
-                      <p className="font-body text-base text-pen mt-1">
-                        <strong>Resume:</strong> {m.resume_evidence}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </WobblyCard>
-
-              {/* Partial & Missing Gaps */}
-              <WobblyCard decoration="tack" tilt="rotate-1">
-                <div className="flex items-center gap-2 mb-3 border-b-2 border-dashed border-pencil/30 pb-2">
-                  <AlertTriangle className="w-6 h-6 text-marker" />
-                  <h3 className="font-heading text-2xl font-bold">Partial Matches & Missing Gaps</h3>
-                </div>
-                <div className="space-y-4">
-                  {jobFit.partial_matches.map((p, i) => (
-                    <div key={i} className="p-3 bg-[#fff9c4]/60 border border-pencil rounded-wobbly">
-                      <div className="flex justify-between items-center">
-                        <span className="font-heading text-lg font-bold text-pencil">{p.skill}</span>
-                        <span className="text-xs bg-[#f59e0b] text-white px-2 py-0.5 rounded-full border border-pencil">
-                          PARTIAL
-                        </span>
-                      </div>
-                      <p className="font-body text-base text-marker mt-1">
-                        <strong>Gap:</strong> {p.gap}
-                      </p>
-                    </div>
-                  ))}
-
-                  {jobFit.missing_skills.map((m, i) => (
-                    <div key={i} className="p-3 bg-marker/10 border border-marker rounded-wobbly">
-                      <div className="flex justify-between items-center">
-                        <span className="font-heading text-lg font-bold text-marker">{m.skill}</span>
-                        <span className="text-xs bg-marker text-white px-2 py-0.5 rounded-full border border-pencil">
-                          MISSING
-                        </span>
-                      </div>
-                      <p className="font-body text-base text-pencil/80 mt-1">
-                        High priority competency to review prior to the interview.
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </WobblyCard>
             </div>
           </div>
         )}

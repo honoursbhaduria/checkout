@@ -690,7 +690,65 @@ export function App() {
               </div>
             </div>
 
-            {/* Qdrant Vector Telemetry & Chunk Ingestion Console */}
+            {/* Evidence Tables */}
+            <div className="grid md:grid-cols-2 gap-6">
+              {/* Verified Matches */}
+              <IndustrialCard title="VERIFIED COMPETENCIES" subtitle="EVIDENCE-BACKED OVERLAP">
+                <div className="space-y-3">
+                  {jobFit.matches.map((m, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
+                        <span className="font-mono text-[10px] bg-[#10b981] text-white px-2 py-0.5 rounded">
+                          VERIFIED
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-inkMuted mt-1">
+                        <strong>JD:</strong> {m.jd_evidence}
+                      </p>
+                      <p className="font-mono text-[11px] text-ink mt-0.5">
+                        <strong>RESUME:</strong> {m.resume_evidence}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </IndustrialCard>
+
+              {/* Partial & Missing */}
+              <IndustrialCard title="DEFICITS & PARTIAL MATCHES" subtitle="CALIBRATION TARGETS">
+                <div className="space-y-3">
+                  {jobFit.partial_matches.map((p, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-safety">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{p.skill}</span>
+                        <span className="font-mono text-[10px] bg-[#f59e0b] text-white px-2 py-0.5 rounded">
+                          PARTIAL
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-safety mt-1 font-bold">
+                        GAP: {p.gap}
+                      </p>
+                    </div>
+                  ))}
+
+                  {jobFit.missing_skills.map((m, i) => (
+                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-[#2d3436]">
+                      <div className="flex items-center justify-between">
+                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
+                        <span className="font-mono text-[10px] bg-safety text-white px-2 py-0.5 rounded">
+                          MISSING
+                        </span>
+                      </div>
+                      <p className="font-mono text-[11px] text-inkMuted mt-1">
+                        Skill not detected in resume artifacts.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </IndustrialCard>
+            </div>
+
+            {/* Qdrant Vector Telemetry & Chunk Ingestion Console (At the end of the page) */}
             <div className="p-5 bg-chassis rounded-xl shadow-floating border border-white/60 space-y-4">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div className="flex items-center gap-3">
@@ -771,64 +829,6 @@ export function App() {
                   </div>
                 </div>
               )}
-            </div>
-
-            {/* Evidence Tables */}
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* Verified Matches */}
-              <IndustrialCard title="VERIFIED COMPETENCIES" subtitle="EVIDENCE-BACKED OVERLAP">
-                <div className="space-y-3">
-                  {jobFit.matches.map((m, i) => (
-                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
-                        <span className="font-mono text-[10px] bg-[#10b981] text-white px-2 py-0.5 rounded">
-                          VERIFIED
-                        </span>
-                      </div>
-                      <p className="font-mono text-[11px] text-inkMuted mt-1">
-                        <strong>JD:</strong> {m.jd_evidence}
-                      </p>
-                      <p className="font-mono text-[11px] text-ink mt-0.5">
-                        <strong>RESUME:</strong> {m.resume_evidence}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </IndustrialCard>
-
-              {/* Partial & Missing */}
-              <IndustrialCard title="DEFICITS & PARTIAL MATCHES" subtitle="CALIBRATION TARGETS">
-                <div className="space-y-3">
-                  {jobFit.partial_matches.map((p, i) => (
-                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-safety">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-ink">{p.skill}</span>
-                        <span className="font-mono text-[10px] bg-[#f59e0b] text-white px-2 py-0.5 rounded">
-                          PARTIAL
-                        </span>
-                      </div>
-                      <p className="font-mono text-[11px] text-safety mt-1 font-bold">
-                        GAP: {p.gap}
-                      </p>
-                    </div>
-                  ))}
-
-                  {jobFit.missing_skills.map((m, i) => (
-                    <div key={i} className="p-3 bg-chassis rounded shadow-recessed border-l-2 border-[#2d3436]">
-                      <div className="flex items-center justify-between">
-                        <span className="font-mono text-xs font-bold text-ink">{m.skill}</span>
-                        <span className="font-mono text-[10px] bg-safety text-white px-2 py-0.5 rounded">
-                          MISSING
-                        </span>
-                      </div>
-                      <p className="font-mono text-[11px] text-inkMuted mt-1">
-                        Skill not detected in resume artifacts.
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </IndustrialCard>
             </div>
           </div>
         )}
