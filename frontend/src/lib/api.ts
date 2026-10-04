@@ -236,15 +236,35 @@ class ApiClient {
   }
 
   async loginDemo(): Promise<{ user: User; token: string }> {
-    const res = await this.request<any>("/auth/login", {
-      method: "POST",
-      body: JSON.stringify({
-        email: "candidate@studentcredibility.com",
-        password: "accelerator123",
-      }),
-    });
-    this.setToken(res.tokens.access_token);
-    return { user: res.user, token: res.tokens.access_token };
+    const creds = {
+      email: "candidate@studentcredibility.com",
+      password: "accelerator123",
+    };
+    try {
+      const res = await this.request<any>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(creds),
+      });
+      this.setToken(res.tokens.access_token);
+      return { user: res.user, token: res.tokens.access_token };
+    } catch (loginErr) {
+      // Fresh database (e.g. first deploy): demo user doesn't exist yet — create it.
+      try {
+        await this.request<any>("/auth/register", {
+          method: "POST",
+          body: JSON.stringify({ ...creds, full_name: "Honours Bhadauria" }),
+        });
+      } catch (regErr: any) {
+        // "already exists" just means a concurrent boot created it — fall through to login.
+        if (!String(regErr?.message || regErr).toLowerCase().includes("already exists")) throw regErr;
+      }
+      const res = await this.request<any>("/auth/login", {
+        method: "POST",
+        body: JSON.stringify(creds),
+      });
+      this.setToken(res.tokens.access_token);
+      return { user: res.user, token: res.tokens.access_token };
+    }
   }
 
   async createJob(title: string, description: string, company?: string): Promise<Job> {
