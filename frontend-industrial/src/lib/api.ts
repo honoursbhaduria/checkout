@@ -224,6 +224,28 @@ class ApiClient {
     });
   }
 
+  async uploadJobFile(file: File, title?: string, company?: string): Promise<Job> {
+    const formData = new FormData();
+    formData.append("file", file);
+    if (title) formData.append("title", title);
+    if (company) formData.append("company", company);
+    const token = this.getToken();
+    const headers: Record<string, string> = {};
+    if (token) {
+      headers["Authorization"] = `Bearer ${token}`;
+    }
+    const res = await fetch(`${API_BASE}/jobs/upload`, {
+      method: "POST",
+      headers,
+      body: formData,
+    });
+    const json = await res.json();
+    if (!res.ok || json.success === false) {
+      throw new Error(json.error?.message || "Failed to upload and parse job description file");
+    }
+    return json.data as Job;
+  }
+
   async createResume(raw_text: string, candidate_name?: string): Promise<Resume> {
     return this.request<Resume>("/resumes", {
       method: "POST",

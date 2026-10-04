@@ -90,6 +90,8 @@ export function App() {
   const [jdTitle, setJdTitle] = useState("AI Engineer Intern");
   const [jdCompany, setJdCompany] = useState("Student Credibility");
   const [jdText, setJdText] = useState(SAMPLE_JD);
+  const [jdFile, setJdFile] = useState<File | null>(null);
+  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">("paste");
   const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
   const [candidateName, setCandidateName] = useState("Honours Bhadauria");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -342,7 +344,12 @@ export function App() {
       setError(null);
       await api.loginDemo();
 
-      const createdJob = await api.createJob(jdTitle, jdText, jdCompany);
+      let createdJob: Job;
+      if (jdInputMode === "upload" && jdFile) {
+        createdJob = await api.uploadJobFile(jdFile, jdTitle, jdCompany);
+      } else {
+        createdJob = await api.createJob(jdTitle, jdText, jdCompany);
+      }
       setJob(createdJob);
 
       let createdResume: Resume;
@@ -575,6 +582,34 @@ export function App() {
               {/* Job Panel */}
               <IndustrialCard title="01 // TARGET JOB DESCRIPTION" subtitle="ENTER ROLES & REQUIREMENTS">
                 <div className="space-y-4">
+                  <div className="flex items-center justify-between pb-2 border-b border-[#a3b1c6]/30">
+                    <span className="font-mono text-xs uppercase text-inkMuted">INGESTION_VECTOR:</span>
+                    <div className="flex items-center gap-1 bg-[#10141d]/10 p-1 rounded-md">
+                      <button
+                        type="button"
+                        onClick={() => setJdInputMode("upload")}
+                        className={`font-mono text-xs px-2.5 py-1 rounded transition-all cursor-pointer ${
+                          jdInputMode === "upload"
+                            ? "bg-steel text-white font-bold shadow-sm"
+                            : "text-inkMuted hover:text-ink font-medium"
+                        }`}
+                      >
+                        <Upload className="w-3 h-3 inline mr-1" /> UPLOAD_FILE
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setJdInputMode("paste")}
+                        className={`font-mono text-xs px-2.5 py-1 rounded transition-all cursor-pointer ${
+                          jdInputMode === "paste"
+                            ? "bg-safety text-white font-bold shadow-sm"
+                            : "text-inkMuted hover:text-ink font-medium"
+                        }`}
+                      >
+                        PASTE_TEXT
+                      </button>
+                    </div>
+                  </div>
+
                   <IndustrialInput
                     label="Role Title"
                     badge="MANDATORY"
@@ -587,14 +622,46 @@ export function App() {
                     value={jdCompany}
                     onChange={(e) => setJdCompany(e.target.value)}
                   />
-                  <IndustrialTextarea
-                    label="Job Description Payload"
-                    badge="RAW_TEXT"
-                    rows={8}
-                    value={jdText}
-                    onChange={(e) => setJdText(e.target.value)}
-                    className="no-scrollbar"
-                  />
+                  {jdInputMode === "upload" ? (
+                    <div>
+                      <span className="font-mono text-xs text-inkMuted uppercase block mb-1.5 font-bold">
+                        PAYLOAD_PAYLOAD: FILE (.PDF, .TXT, .MD, .DOCX)
+                      </span>
+                      <div className="border border-dashed border-[#a3b1c6] rounded-lg p-6 text-center bg-chassis/60 hover:bg-chassis transition-all cursor-pointer relative shadow-sharpInset">
+                        <input
+                          type="file"
+                          accept=".pdf,.txt,.md,.docx,.doc"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setJdFile(e.target.files[0]);
+                            }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <Upload className="w-8 h-8 text-safety mx-auto mb-2 animate-pulse" />
+                        {jdFile ? (
+                          <div>
+                            <p className="font-mono text-sm text-safety font-bold">{jdFile.name}</p>
+                            <p className="font-mono text-xs text-inkMuted">{(jdFile.size / 1024).toFixed(1)} KB — BUFFER_MOUNTED</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-mono text-sm text-ink font-bold">DROP_FILE OR CLICK TO SELECT</p>
+                            <p className="font-mono text-xs text-inkMuted">FORMATS: PDF, TXT, MARKDOWN, DOCX</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <IndustrialTextarea
+                      label="Job Description Payload"
+                      badge="RAW_TEXT"
+                      rows={8}
+                      value={jdText}
+                      onChange={(e) => setJdText(e.target.value)}
+                      className="no-scrollbar"
+                    />
+                  )}
                 </div>
               </IndustrialCard>
 

@@ -95,6 +95,8 @@ export function App() {
   const [jdTitle, setJdTitle] = useState("AI Engineer Intern");
   const [jdCompany, setJdCompany] = useState("Student Credibility");
   const [jdText, setJdText] = useState(SAMPLE_JD);
+  const [jdFile, setJdFile] = useState<File | null>(null);
+  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">("paste");
   const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
   const [candidateName, setCandidateName] = useState("Honours Bhadauria");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
@@ -390,7 +392,12 @@ export function App() {
       setError(null);
       await api.loginDemo();
 
-      const createdJob = await api.createJob(jdTitle, jdText, jdCompany);
+      let createdJob: Job;
+      if (jdInputMode === "upload" && jdFile) {
+        createdJob = await api.uploadJobFile(jdFile, jdTitle, jdCompany);
+      } else {
+        createdJob = await api.createJob(jdTitle, jdText, jdCompany);
+      }
       setJob(createdJob);
 
       let createdResume: Resume;
@@ -603,9 +610,31 @@ export function App() {
             <div className="grid md:grid-cols-2 gap-8 mb-8">
               {/* Job Description Card */}
               <WobblyCard decoration="tape" tilt="-rotate-1">
-                <div className="flex items-center gap-2 mb-4 border-b-2 border-dashed border-pencil/30 pb-2">
-                  <Briefcase className="w-6 h-6 text-pen" />
-                  <h3 className="font-heading text-2xl font-bold">1. Job Description</h3>
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4 border-b-2 border-dashed border-pencil/30 pb-2">
+                  <div className="flex items-center gap-2">
+                    <Briefcase className="w-6 h-6 text-pen" />
+                    <h3 className="font-heading text-2xl font-bold">1. Job Description</h3>
+                  </div>
+                  <div className="flex items-center gap-1 bg-erased p-1 rounded-wobbly border border-pencil text-sm font-body">
+                    <button
+                      type="button"
+                      onClick={() => setJdInputMode("upload")}
+                      className={`px-2.5 py-1 rounded-wobbly transition-all cursor-pointer ${
+                        jdInputMode === "upload" ? "bg-pen text-white font-bold shadow-sketchSm" : "text-pencil hover:bg-white/60"
+                      }`}
+                    >
+                      Upload File
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setJdInputMode("paste")}
+                      className={`px-2.5 py-1 rounded-wobbly transition-all cursor-pointer ${
+                        jdInputMode === "paste" ? "bg-pencil text-white font-bold shadow-sketchSm" : "text-pencil hover:bg-white/60"
+                      }`}
+                    >
+                      Paste Text
+                    </button>
+                  </div>
                 </div>
                 <div className="space-y-4">
                   <HandDrawnInput
@@ -620,14 +649,44 @@ export function App() {
                     onChange={(e) => setJdCompany(e.target.value)}
                     placeholder="e.g. Student Credibility"
                   />
-                  <HandDrawnTextarea
-                    label="Paste Job Description"
-                    rows={8}
-                    value={jdText}
-                    onChange={(e) => setJdText(e.target.value)}
-                    placeholder="Paste full job description requirements here..."
-                    className="no-scrollbar"
-                  />
+                  {jdInputMode === "upload" ? (
+                    <div>
+                      <label className="font-heading text-xl text-pencil block mb-2">Upload JD File (.pdf, .txt, .md, .docx)</label>
+                      <div className="border-[3px] border-dashed border-pen/70 rounded-wobbly p-6 text-center bg-blue-50/40 hover:bg-blue-50/70 transition-all cursor-pointer relative">
+                        <input
+                          type="file"
+                          accept=".pdf,.txt,.md,.docx,.doc"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files[0]) {
+                              setJdFile(e.target.files[0]);
+                            }
+                          }}
+                          className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                        />
+                        <Briefcase className="w-10 h-10 text-pen mx-auto mb-2 animate-bounce" />
+                        {jdFile ? (
+                          <div>
+                            <p className="font-heading text-lg text-pen font-bold">{jdFile.name}</p>
+                            <p className="font-body text-sm text-pencil/70">{(jdFile.size / 1024).toFixed(1)} KB — Ready to parse</p>
+                          </div>
+                        ) : (
+                          <div>
+                            <p className="font-heading text-lg text-pencil font-bold">Drag & drop or click to choose JD file</p>
+                            <p className="font-body text-sm text-pencil/60">Supports PDF, Markdown, TXT, DOCX</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ) : (
+                    <HandDrawnTextarea
+                      label="Paste Job Description"
+                      rows={8}
+                      value={jdText}
+                      onChange={(e) => setJdText(e.target.value)}
+                      placeholder="Paste full job description requirements here..."
+                      className="no-scrollbar"
+                    />
+                  )}
                 </div>
               </WobblyCard>
 
