@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 class GeminiProvider(LLMProvider):
     def __init__(self, api_key: Optional[str] = None):
         self.api_key = api_key or settings.GEMINI_API_KEY
-        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent"
+        self.base_url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent"
 
     async def health_check(self) -> bool:
         return bool(self.api_key)

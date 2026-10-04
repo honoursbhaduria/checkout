@@ -7,19 +7,32 @@ from app.core.config import settings
 logger = logging.getLogger(__name__)
 
 
+import os
+
 class QdrantVectorStore:
     """
-    Self-hosted Qdrant Vector Store wrapper.
-    Connects to localhost:6333 (Docker self-hosted), or falls back to ':memory:' for zero-dependency execution.
+    Qdrant Vector Store wrapper.
+    Supports Qdrant Cloud with API Key, localhost:6333, or in-memory fallback.
     """
 
-    def __init__(self, host: str = "localhost", port: int = 6333):
+    def __init__(self, url: Optional[str] = None, api_key: Optional[str] = None, host: str = "localhost", port: int = 6333):
+        self.url = url or os.environ.get("QDRANT_URL")
+        self.api_key = api_key or os.environ.get("QDRANT_API_KEY")
         self.host = host
         self.port = port
         self._client: Optional[QdrantClient] = None
         self._init_client()
 
     def _init_client(self):
+        if self.url:
+            try:
+                self._client = QdrantClient(url=self.url, api_key=self.api_key, timeout=5.0)
+                self._client.get_collections()
+                logger.info(f"Connected to Qdrant Cloud at {self.url}")
+                return
+            except Exception as e:
+                logger.warning(f"Failed to connect to Qdrant Cloud: {e}")
+
         try:
             self._client = QdrantClient(host=self.host, port=self.port, timeout=2.0)
             self._client.get_collections()

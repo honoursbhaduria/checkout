@@ -78,7 +78,8 @@ class BackblazeB2Storage:
 
 
 b2_storage = BackblazeB2Storage(
-    endpoint_url=os.environ.get("B2_ENDPOINT_URL"),
-    key_id=os.environ.get("B2_KEY_ID"),
-    app_key=os.environ.get("B2_APPLICATION_KEY")
+    endpoint_url=settings.B2_ENDPOINT_URL or os.environ.get("B2_ENDPOINT_URL"),
+    key_id=settings.B2_KEY_ID or os.environ.get("B2_KEY_ID"),
+    app_key=settings.B2_APPLICATION_KEY or os.environ.get("B2_APPLICATION_KEY"),
+    bucket_name=settings.B2_BUCKET_NAME
 )

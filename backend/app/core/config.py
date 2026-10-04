@@ -28,8 +28,17 @@ class Settings(BaseSettings):
     # AI Providers
     GEMINI_API_KEY: str = ""
     OPENAI_API_KEY: str = ""
-    OLLAMA_BASE_URL: str = "http://localhost:11434"
-    DEFAULT_AI_PROVIDER: str = "mock"  # "gemini" | "openai" | "ollama" | "mock"
+    DEFAULT_AI_PROVIDER: str = "gemini"  # "gemini" | "openai" | "mock"
+    
+    # Qdrant Cloud
+    QDRANT_URL: str = ""
+    QDRANT_API_KEY: str = ""
+
+    # Backblaze B2
+    B2_ENDPOINT_URL: str = "https://s3.us-east-005.backblazeb2.com"
+    B2_KEY_ID: str = ""
+    B2_APPLICATION_KEY: str = ""
+    B2_BUCKET_NAME: str = "checkout123456789876543"
     
     # CORS
     CORS_ORIGINS: List[str] = [
