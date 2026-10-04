@@ -42,3 +42,12 @@
 .animate-jiggle:hover {
   animation: jiggle 0.2s ease-in-out infinite alternate;
 }
+
+/* Hide scrollbar while preserving scroll functionality */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}

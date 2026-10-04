@@ -436,6 +436,7 @@ export function App() {
                     value={jdText}
                     onChange={(e) => setJdText(e.target.value)}
                     placeholder="Paste full job description requirements here..."
+                    className="no-scrollbar"
                   />
                 </div>
               </WobblyCard>

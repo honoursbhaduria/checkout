@@ -50,7 +50,7 @@ export const HandDrawnTextarea: React.FC<HandDrawnTextareaProps> = ({
       )}
       <textarea
         className={`w-full font-body text-xl px-4 py-3 bg-white text-pencil border-2 border-pencil rounded-wobblyMd shadow-sketchSm
-          outline-none focus:border-pen focus:ring-2 focus:ring-pen/20 transition-all placeholder:text-pencil/40 resize-y ${className}`}
+          outline-none focus:border-pen focus:ring-2 focus:ring-pen/20 transition-all placeholder:text-pencil/40 resize-y no-scrollbar ${className}`}
         {...props}
       />
       {error && (

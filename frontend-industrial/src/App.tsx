@@ -430,6 +430,7 @@ export function App() {
                     rows={8}
                     value={jdText}
                     onChange={(e) => setJdText(e.target.value)}
+                    className="no-scrollbar"
                   />
                 </div>
               </IndustrialCard>

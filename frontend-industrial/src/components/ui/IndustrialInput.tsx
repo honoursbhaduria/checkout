@@ -61,7 +61,7 @@ export const IndustrialTextarea: React.FC<IndustrialTextareaProps> = ({
       )}
       <textarea
         className={`w-full font-mono text-sm px-4 py-3 bg-chassis text-ink rounded-md shadow-recessed
-          border-none outline-none focus:ring-2 focus:ring-safety/40 transition-all placeholder:text-inkMuted/50 resize-y leading-relaxed ${className}`}
+          border-none outline-none focus:ring-2 focus:ring-safety/40 transition-all placeholder:text-inkMuted/50 resize-y leading-relaxed no-scrollbar ${className}`}
         {...props}
       />
     </div>
