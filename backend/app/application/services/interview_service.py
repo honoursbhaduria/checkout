@@ -10,7 +10,8 @@ from app.infrastructure.models.models import (
 )
 from app.domain.schemas import (
     InterviewCreate, InterviewResponse, QuestionResponse, 
-    QuestionDetail, AnswerSubmitRequest, AnswerEvaluationResponse
+    QuestionDetail, AnswerSubmitRequest, AnswerEvaluationResponse,
+    InterviewHistoryItem, InterviewHistorySummary
 )
 from app.ai.router import ai_router
 from app.core.exceptions import ResourceNotFoundError, StateConflictError
@@ -316,3 +317,90 @@ class InterviewService:
                 "progress_percent": int(min(100, (question.sequence_number / 9) * 100))
             }
         )
+
+    async def get_interview_history(self, user_id: UUID) -> InterviewHistorySummary:
+        stmt = (
+            select(Interview, Job, Resume)
+            .join(Job, Interview.job_id == Job.id)
+            .join(Resume, Interview.resume_id == Resume.id)
+            .options(
+                selectinload(Interview.report),
+                selectinload(Interview.questions).selectinload(InterviewQuestion.answer).selectinload(Answer.evaluation)
+            )
+            .where(Interview.user_id == user_id)
+            .order_by(Interview.created_at.desc())
+        )
+        res = await self.db.execute(stmt)
+        rows = res.all()
+
+        history_items: List[InterviewHistoryItem] = []
+        total = len(rows)
+        good_count = 0
+        bad_count = 0
+        in_progress_count = 0
+        scores: List[float] = []
+
+        for interview, job, resume in rows:
+            q_count = len(interview.questions or [])
+            answered_count = sum(1 for q in (interview.questions or []) if q.answer is not None)
+
+            score: Optional[float] = None
+            readiness: Optional[str] = None
+            top_strength: Optional[str] = None
+            top_weakness: Optional[str] = None
+
+            if interview.report:
+                score = round(float(interview.report.overall_score), 1)
+                readiness = interview.report.readiness_classification
+                top_strength = interview.report.strengths[0] if interview.report.strengths else None
+                top_weakness = interview.report.weaknesses[0] if interview.report.weaknesses else None
+            elif answered_count > 0:
+                eval_scores = [q.answer.evaluation.overall_score * 10 for q in interview.questions if q.answer and q.answer.evaluation]
+                if eval_scores:
+                    score = round(sum(eval_scores) / len(eval_scores), 1)
+                    readiness = "INTERVIEW_READY" if score >= 70 else "NEEDS_PREPARATION"
+
+            is_good: Optional[bool] = None
+            if score is not None:
+                scores.append(score)
+                if score >= 70 or readiness in ["STRONG_CANDIDATE", "INTERVIEW_READY"]:
+                    is_good = True
+                    good_count += 1
+                else:
+                    is_good = False
+                    bad_count += 1
+            else:
+                in_progress_count += 1
+
+            history_items.append(
+                InterviewHistoryItem(
+                    interview_id=interview.id,
+                    job_id=job.id,
+                    resume_id=resume.id,
+                    job_title=job.title,
+                    company_name=job.company or "Student Credibility",
+                    candidate_name=resume.candidate_name or "Honours Bhadauria",
+                    status=interview.status,
+                    created_at=interview.created_at,
+                    completed_at=interview.completed_at,
+                    overall_score=score,
+                    readiness_classification=readiness,
+                    is_good=is_good,
+                    questions_count=q_count,
+                    answered_count=answered_count,
+                    top_strength=top_strength,
+                    top_weakness=top_weakness,
+                )
+            )
+
+        avg_score = round(sum(scores) / len(scores), 1) if scores else 0.0
+
+        return InterviewHistorySummary(
+            total_interviews=total,
+            good_interviews_count=good_count,
+            bad_interviews_count=bad_count,
+            in_progress_count=in_progress_count,
+            average_score=avg_score,
+            history=history_items
+        )
+

@@ -165,6 +165,34 @@ export interface PreparationPlanData {
   }[];
 }
 
+export interface InterviewHistoryItem {
+  interview_id: string;
+  job_id: string;
+  resume_id: string;
+  job_title: string;
+  company_name: string;
+  candidate_name: string;
+  status: string;
+  created_at: string;
+  completed_at?: string | null;
+  overall_score?: number | null;
+  readiness_classification?: string | null;
+  is_good?: boolean | null;
+  questions_count: number;
+  answered_count: number;
+  top_strength?: string | null;
+  top_weakness?: string | null;
+}
+
+export interface InterviewHistorySummary {
+  total_interviews: number;
+  good_interviews_count: number;
+  bad_interviews_count: number;
+  in_progress_count: number;
+  average_score: number;
+  history: InterviewHistoryItem[];
+}
+
 class ApiClient {
   private token: string | null = null;
 
@@ -334,6 +362,10 @@ class ApiClient {
 
   async getPreparationPlan(interview_id: string): Promise<PreparationPlanData> {
     return this.request<PreparationPlanData>(`/interviews/${interview_id}/preparation`);
+  }
+
+  async getInterviewHistory(): Promise<InterviewHistorySummary> {
+    return this.request<InterviewHistorySummary>("/interviews/history");
   }
 
   async transcribeAudioFile(audioBlob: Blob): Promise<string> {

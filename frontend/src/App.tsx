@@ -21,7 +21,10 @@ import {
   Database,
   Layers,
   HardDrive,
-  FileCheck
+  FileCheck,
+  History,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
 import {
@@ -33,6 +36,7 @@ import {
   type AnswerEvaluation,
   type ReportData,
   type PreparationPlanData,
+  type InterviewHistorySummary,
 } from "./lib/api";
 
 import { WobblyButton } from "./components/ui/WobblyButton";
@@ -86,32 +90,48 @@ RAG-Powered Intelligent Document Copilot
 - Built full-stack retrieval-augmented generation system indexing 500+ research papers in Qdrant vector database.
 - Integrated streaming speech-to-text allowing real-time voice queries and answers.`;
 
+const STORAGE_KEY = "checkout_interview_state_v1";
+
+const getSavedState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error("Failed to load saved state:", e);
+  }
+  return null;
+};
+
 export function App() {
-  const [activeTab, setActiveTab] = useState<"ingest" | "role" | "fit" | "interview" | "report">("ingest");
+  const saved = getSavedState();
+
+  const [activeTab, setActiveTab] = useState<"ingest" | "role" | "fit" | "interview" | "report" | "history">(
+    saved?.activeTab || "ingest"
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Data states
-  const [jdTitle, setJdTitle] = useState("AI Engineer Intern");
-  const [jdCompany, setJdCompany] = useState("Student Credibility");
-  const [jdText, setJdText] = useState(SAMPLE_JD);
+  const [jdTitle, setJdTitle] = useState(saved?.jdTitle || "AI Engineer Intern");
+  const [jdCompany, setJdCompany] = useState(saved?.jdCompany || "Student Credibility");
+  const [jdText, setJdText] = useState(saved?.jdText || SAMPLE_JD);
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">("paste");
-  const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
-  const [candidateName, setCandidateName] = useState("Honours Bhadauria");
+  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">(saved?.jdInputMode || "paste");
+  const [resumeText, setResumeText] = useState(saved?.resumeText || SAMPLE_RESUME);
+  const [candidateName, setCandidateName] = useState(saved?.candidateName || "Honours Bhadauria");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">("upload");
+  const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">(saved?.resumeInputMode || "upload");
   const [showChunksDrawer, setShowChunksDrawer] = useState<boolean>(false);
 
-  const [job, setJob] = useState<Job | null>(null);
-  const [resume, setResume] = useState<Resume | null>(null);
-  const [jobFit, setJobFit] = useState<JobFitResult | null>(null);
+  const [job, setJob] = useState<Job | null>(saved?.job || null);
+  const [resume, setResume] = useState<Resume | null>(saved?.resume || null);
+  const [jobFit, setJobFit] = useState<JobFitResult | null>(saved?.jobFit || null);
 
   // Interview state
-  const [interviewId, setInterviewId] = useState<string | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(null);
-  const [candidateAnswer, setCandidateAnswer] = useState<string>("");
-  const [latestEvaluation, setLatestEvaluation] = useState<AnswerEvaluation | null>(null);
+  const [interviewId, setInterviewId] = useState<string | null>(saved?.interviewId || null);
+  const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(saved?.currentQuestion || null);
+  const [candidateAnswer, setCandidateAnswer] = useState<string>(saved?.candidateAnswer || "");
+  const [latestEvaluation, setLatestEvaluation] = useState<AnswerEvaluation | null>(saved?.latestEvaluation || null);
   const [isSpeakingQuestion, setIsSpeakingQuestion] = useState<boolean>(false);
   const [isListeningMic, setIsListeningMic] = useState<boolean>(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
@@ -126,13 +146,132 @@ export function App() {
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   // Report state
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(null);
+  const [report, setReport] = useState<ReportData | null>(saved?.report || null);
+  const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(saved?.prepPlan || null);
 
-  // Initialize Demo Auth
+  // History state
+  const [historySummary, setHistorySummary] = useState<InterviewHistorySummary | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "good" | "bad">("all");
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  // Synchronize state changes to localStorage so page refresh never loses progress
   useEffect(() => {
-    api.loginDemo().catch((e) => console.log("Demo login initialized:", e));
+    try {
+      const stateToPersist = {
+        activeTab,
+        job,
+        resume,
+        jobFit,
+        interviewId,
+        currentQuestion,
+        candidateAnswer,
+        latestEvaluation,
+        report,
+        prepPlan,
+        jdTitle,
+        jdCompany,
+        jdText,
+        candidateName,
+        resumeText,
+        jdInputMode,
+        resumeInputMode,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist));
+    } catch (e) {
+      console.warn("Storage write error:", e);
+    }
+  }, [
+    activeTab,
+    job,
+    resume,
+    jobFit,
+    interviewId,
+    currentQuestion,
+    candidateAnswer,
+    latestEvaluation,
+    report,
+    prepPlan,
+    jdTitle,
+    jdCompany,
+    jdText,
+    candidateName,
+    resumeText,
+    jdInputMode,
+    resumeInputMode,
+  ]);
+
+  const fetchHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const summary = await api.getInterviewHistory();
+      setHistorySummary(summary);
+    } catch (e) {
+      console.warn("Could not fetch interview history:", e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
+
+  // Initialize Demo Auth and load historical attempts
+  useEffect(() => {
+    api.loginDemo()
+      .then(() => fetchHistory())
+      .catch((e) => console.log("Demo login initialized:", e));
   }, []);
+
+  const handleResetSession = () => {
+    if (window.confirm("Start a new interview session? This will clear current job & resume progress to let you test another role.")) {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      setJob(null);
+      setResume(null);
+      setJobFit(null);
+      setInterviewId(null);
+      setCurrentQuestion(null);
+      setCandidateAnswer("");
+      setLatestEvaluation(null);
+      setReport(null);
+      setPrepPlan(null);
+      setActiveTab("ingest");
+    }
+  };
+
+  const handleViewPastReport = async (pastInterviewId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [pastReport, pastPlan] = await Promise.all([
+        api.getReport(pastInterviewId),
+        api.getPreparationPlan(pastInterviewId).catch(() => null),
+      ]);
+      setInterviewId(pastInterviewId);
+      setReport(pastReport);
+      setPrepPlan(pastPlan);
+      setActiveTab("report");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to load report for this interview");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResumeInterview = async (pastInterviewId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const q = await api.getCurrentQuestion(pastInterviewId);
+      setInterviewId(pastInterviewId);
+      setCurrentQuestion(q);
+      setActiveTab("interview");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to resume interview");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // Web Audio AI interviewer voice chime (guarantees audible playback across all systems)
   const playAIChime = () => {
@@ -497,6 +636,7 @@ export function App() {
       setReport(rep);
       setPrepPlan(plan);
       setActiveTab("report");
+      fetchHistory();
 
       confetti({
         particleCount: 80,
@@ -531,53 +671,84 @@ export function App() {
             </div>
           </div>
 
-          {/* Navigation Tabs */}
-          <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+          <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end overflow-x-auto no-scrollbar">
+            {/* Navigation Tabs */}
+            <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+              <button
+                onClick={() => setActiveTab("ingest")}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === "ingest" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased"
+                }`}
+              >
+                1. Ingest
+              </button>
+              <button
+                onClick={() => setActiveTab("role")}
+                disabled={!job}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === "role" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+                }`}
+              >
+                2. Role
+              </button>
+              <button
+                onClick={() => setActiveTab("fit")}
+                disabled={!jobFit}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === "fit" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+                }`}
+              >
+                3. Job Fit
+              </button>
+              <button
+                onClick={() => setActiveTab("interview")}
+                disabled={!currentQuestion}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === "interview" ? "bg-marker text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+                }`}
+              >
+                4. Voice Interview
+              </button>
+              <button
+                onClick={() => setActiveTab("report")}
+                disabled={!report}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
+                  activeTab === "report" ? "bg-pen text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
+                }`}
+              >
+                5. Report
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("history");
+                  fetchHistory();
+                }}
+                className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === "history" ? "bg-[#8b5cf6] text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased"
+                }`}
+              >
+                <History className="w-4 h-4" />
+                <span>6. History</span>
+                {historySummary && (
+                  <span className={`text-xs px-1.5 py-0.5 rounded-full font-bold ${
+                    activeTab === "history" ? "bg-white text-[#8b5cf6]" : "bg-pencil text-white"
+                  }`}>
+                    {historySummary.total_interviews}
+                  </span>
+                )}
+              </button>
+            </nav>
+
             <button
-              onClick={() => setActiveTab("ingest")}
-              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "ingest" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased"
-              }`}
+              type="button"
+              onClick={handleResetSession}
+              title="Start a new interview session"
+              className="font-body text-xs sm:text-sm px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil/40 bg-white hover:bg-marker hover:text-white hover:border-pencil transition-all text-pencil flex items-center gap-1 cursor-pointer shrink-0 ml-1 shadow-sketchSm"
             >
-              1. Ingest
+              <RotateCcw className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">New Session</span>
             </button>
-            <button
-              onClick={() => setActiveTab("role")}
-              disabled={!job}
-              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "role" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
-              }`}
-            >
-              2. Role
-            </button>
-            <button
-              onClick={() => setActiveTab("fit")}
-              disabled={!jobFit}
-              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "fit" ? "bg-pencil text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
-              }`}
-            >
-              3. Job Fit
-            </button>
-            <button
-              onClick={() => setActiveTab("interview")}
-              disabled={!currentQuestion}
-              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "interview" ? "bg-marker text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
-              }`}
-            >
-              4. Voice Interview
-            </button>
-            <button
-              onClick={() => setActiveTab("report")}
-              disabled={!report}
-              className={`font-body text-sm sm:text-lg px-2.5 sm:px-3 py-1 sm:py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all whitespace-nowrap cursor-pointer ${
-                activeTab === "report" ? "bg-pen text-white shadow-sketchSm font-bold" : "bg-white text-pencil hover:bg-erased disabled:opacity-40"
-              }`}
-            >
-              5. Report
-            </button>
-          </nav>
+          </div>
         </div>
       </header>
 
@@ -1443,6 +1614,254 @@ export function App() {
                   <RotateCcw className="w-5 h-5" /> Start Another Interview
                 </span>
               </WobblyButton>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 6: ATTEMPTED INTERVIEW HISTORY */}
+        {activeTab === "history" && (
+          <div>
+            <div className="text-center mb-6 sm:mb-8">
+              <span className="font-body text-sm sm:text-xl uppercase bg-erased border border-pencil px-3 sm:px-4 py-1 rounded-full">
+                Performance Tracking &amp; History
+              </span>
+              <h2 className="font-heading text-3xl sm:text-5xl font-bold text-pencil mt-2 mb-2">
+                Attempted Interview History
+              </h2>
+              <p className="font-body text-base sm:text-2xl text-pencil/80 max-w-xl mx-auto">
+                Detailed record of all simulation attempts — track your progress from early gaps to interview readiness.
+              </p>
+            </div>
+
+            {/* Metric Overview Cards */}
+            {historySummary && (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4 mb-8">
+                {/* Total Interviews */}
+                <div className="p-4 sm:p-5 bg-white border-[3px] border-pencil rounded-xl md:rounded-wobblyMd shadow-sketch text-center">
+                  <span className="font-body text-xs sm:text-base text-pencil/70 block uppercase font-bold">
+                    Total Attempts
+                  </span>
+                  <div className="font-heading text-3xl sm:text-5xl font-bold text-pencil mt-1">
+                    {historySummary.total_interviews}
+                  </div>
+                  <span className="font-body text-xs text-pencil/60 mt-1 block">Simulations Logged</span>
+                </div>
+
+                {/* Good Interviews */}
+                <div className="p-4 sm:p-5 bg-[#d1fae5] border-[3px] border-[#10b981] rounded-xl md:rounded-wobblyMd shadow-sketch text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-[#047857]">
+                    <ThumbsUp className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-body text-xs sm:text-base font-bold uppercase">
+                      Good Attempts
+                    </span>
+                  </div>
+                  <div className="font-heading text-3xl sm:text-5xl font-bold text-[#065f46] mt-1">
+                    {historySummary.good_interviews_count}
+                  </div>
+                  <span className="font-body text-xs text-[#047857] mt-1 block font-bold">
+                    Interview Ready (≥70%)
+                  </span>
+                </div>
+
+                {/* Bad / Needs Work Interviews */}
+                <div className="p-4 sm:p-5 bg-[#fee2e2] border-[3px] border-marker rounded-xl md:rounded-wobblyMd shadow-sketch text-center">
+                  <div className="flex items-center justify-center gap-1.5 text-marker">
+                    <ThumbsDown className="w-4 h-4 sm:w-5 sm:h-5" />
+                    <span className="font-body text-xs sm:text-base font-bold uppercase">
+                      Needs Work
+                    </span>
+                  </div>
+                  <div className="font-heading text-3xl sm:text-5xl font-bold text-marker mt-1">
+                    {historySummary.bad_interviews_count}
+                  </div>
+                  <span className="font-body text-xs text-marker mt-1 block font-bold">
+                    Preparation Gaps (&lt;70%)
+                  </span>
+                </div>
+
+                {/* Average Score */}
+                <div className="p-4 sm:p-5 bg-[#dbeafe] border-[3px] border-pen rounded-xl md:rounded-wobblyMd shadow-sketch text-center">
+                  <span className="font-body text-xs sm:text-base text-pen block uppercase font-bold">
+                    Average Score
+                  </span>
+                  <div className="font-heading text-3xl sm:text-5xl font-bold text-pen mt-1">
+                    {historySummary.average_score}%
+                  </div>
+                  <span className="font-body text-xs text-pen mt-1 block">Calibrated Rubric</span>
+                </div>
+              </div>
+            )}
+
+            {/* Filter Buttons & Refresh */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setHistoryFilter("all")}
+                  className={`font-body text-xs sm:text-base px-3 sm:px-4 py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil transition-all cursor-pointer ${
+                    historyFilter === "all" ? "bg-pencil text-white font-bold" : "bg-white text-pencil hover:bg-erased"
+                  }`}
+                >
+                  All Attempts ({historySummary?.total_interviews || 0})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter("good")}
+                  className={`font-body text-xs sm:text-base px-3 sm:px-4 py-1.5 rounded-lg md:rounded-wobbly border-2 border-[#10b981] transition-all cursor-pointer flex items-center gap-1.5 ${
+                    historyFilter === "good" ? "bg-[#10b981] text-white font-bold" : "bg-white text-[#047857] hover:bg-emerald-50"
+                  }`}
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  Good ({historySummary?.good_interviews_count || 0})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter("bad")}
+                  className={`font-body text-xs sm:text-base px-3 sm:px-4 py-1.5 rounded-lg md:rounded-wobbly border-2 border-marker transition-all cursor-pointer flex items-center gap-1.5 ${
+                    historyFilter === "bad" ? "bg-marker text-white font-bold" : "bg-white text-marker hover:bg-red-50"
+                  }`}
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                  Needs Work ({historySummary?.bad_interviews_count || 0})
+                </button>
+              </div>
+
+              <button
+                onClick={fetchHistory}
+                disabled={loadingHistory}
+                className="font-body text-xs sm:text-base px-3 py-1.5 rounded-lg md:rounded-wobbly border-2 border-pencil bg-white hover:bg-erased text-pencil flex items-center gap-1.5 transition-all cursor-pointer"
+              >
+                <RotateCcw className={`w-3.5 h-3.5 ${loadingHistory ? "animate-spin" : ""}`} />
+                <span>{loadingHistory ? "Refreshing..." : "Refresh History"}</span>
+              </button>
+            </div>
+
+            {/* Historical Interviews Cards List */}
+            <div className="space-y-4 mb-10">
+              {(!historySummary || historySummary.history.length === 0) ? (
+                <div className="p-8 bg-white border-2 border-dashed border-pencil rounded-xl md:rounded-wobblyMd text-center">
+                  <p className="font-heading text-2xl text-pencil mb-2">No interview attempts found</p>
+                  <p className="font-body text-lg text-pencil/70 mb-4">
+                    Complete an interview simulation to see your progress metrics and readiness report here.
+                  </p>
+                  <WobblyButton size="md" onClick={() => setActiveTab("ingest")}>
+                    Start New Interview
+                  </WobblyButton>
+                </div>
+              ) : (
+                historySummary.history
+                  .filter((item) => {
+                    if (historyFilter === "good") return item.is_good === true;
+                    if (historyFilter === "bad") return item.is_good === false;
+                    return true;
+                  })
+                  .map((item) => (
+                    <div
+                      key={item.interview_id}
+                      className={`p-4 sm:p-6 bg-white border-[3px] rounded-xl md:rounded-wobblyMd shadow-sketch transition-all ${
+                        item.is_good === true
+                          ? "border-[#10b981]/70 hover:border-[#10b981]"
+                          : item.is_good === false
+                          ? "border-marker/70 hover:border-marker"
+                          : "border-pencil/50"
+                      }`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-dashed border-pencil/20">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <h3 className="font-heading text-xl sm:text-2xl font-bold text-pencil">
+                              {item.job_title}
+                            </h3>
+                            <span className="font-body text-xs sm:text-sm bg-erased border border-pencil px-2.5 py-0.5 rounded-full text-pencil/80">
+                              {item.company_name}
+                            </span>
+                            <span className={`text-xs font-heading font-bold px-2.5 py-0.5 rounded-full border ${
+                              item.status === "COMPLETED"
+                                ? "bg-[#d1fae5] text-[#065f46] border-[#10b981]"
+                                : "bg-[#fef3c7] text-[#92400e] border-[#f59e0b]"
+                            }`}>
+                              {item.status}
+                            </span>
+                          </div>
+                          <div className="flex flex-wrap items-center gap-3 font-body text-xs sm:text-sm text-pencil/70 mt-1">
+                            <span>Candidate: <strong>{item.candidate_name}</strong></span>
+                            <span>•</span>
+                            <span>{new Date(item.created_at).toLocaleDateString()} at {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                            <span>•</span>
+                            <span>{item.answered_count} / {item.questions_count || 9} Questions Answered</span>
+                          </div>
+                        </div>
+
+                        {/* Performance Indicator Pill */}
+                        <div className="flex items-center gap-3 shrink-0">
+                          {item.overall_score !== null && (
+                            <div className="text-right">
+                              <span className="font-body text-xs text-pencil/60 block">Score</span>
+                              <span className="font-heading text-2xl sm:text-3xl font-bold text-pencil">
+                                {item.overall_score} <span className="text-sm text-pencil/50">/ 100</span>
+                              </span>
+                            </div>
+                          )}
+                          <div>
+                            {item.is_good === true ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-heading font-bold bg-[#10b981] text-white border border-pencil shadow-sm">
+                                <ThumbsUp className="w-3.5 h-3.5" /> Good Attempt
+                              </span>
+                            ) : item.is_good === false ? (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-heading font-bold bg-marker text-white border border-pencil shadow-sm">
+                                <ThumbsDown className="w-3.5 h-3.5" /> Needs Work
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-heading font-bold bg-amber-400 text-pencil border border-pencil">
+                                In Progress
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Strengths & Weaknesses snippet */}
+                      {(item.top_strength || item.top_weakness) && (
+                        <div className="grid sm:grid-cols-2 gap-2 mt-3 pt-2 text-xs sm:text-sm font-body">
+                          {item.top_strength && (
+                            <div className="bg-emerald-50/70 p-2 rounded border border-emerald-200">
+                              <strong className="text-[#047857]">Key Strength: </strong>
+                              <span className="text-pencil">{item.top_strength}</span>
+                            </div>
+                          )}
+                          {item.top_weakness && (
+                            <div className="bg-red-50/70 p-2 rounded border border-red-200">
+                              <strong className="text-marker">Focus Area: </strong>
+                              <span className="text-pencil">{item.top_weakness}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Card Action Buttons */}
+                      <div className="flex flex-wrap items-center justify-end gap-2 mt-3 pt-3 border-t border-dashed border-pencil/20">
+                        {item.status === "COMPLETED" || item.overall_score !== null ? (
+                          <WobblyButton
+                            size="sm"
+                            variant="primary"
+                            onClick={() => handleViewPastReport(item.interview_id)}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              View Full Report &amp; Feedback <ArrowRight className="w-3.5 h-3.5" />
+                            </span>
+                          </WobblyButton>
+                        ) : (
+                          <WobblyButton
+                            size="sm"
+                            variant="danger"
+                            onClick={() => handleResumeInterview(item.interview_id)}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              Resume Interview <Play className="w-3.5 h-3.5" />
+                            </span>
+                          </WobblyButton>
+                        )}
+                      </div>
+                    </div>
+                  ))
+              )}
             </div>
           </div>
         )}

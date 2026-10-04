@@ -279,3 +279,33 @@ class PreparationPlanResponse(BaseModel):
     interview_id: UUID
     priority: str
     items: List[PreparationItem]
+
+
+# --- Interview History Schemas ---
+class InterviewHistoryItem(BaseModel):
+    interview_id: UUID
+    job_id: UUID
+    resume_id: UUID
+    job_title: str
+    company_name: str
+    candidate_name: str
+    status: str
+    created_at: datetime
+    completed_at: Optional[datetime] = None
+    overall_score: Optional[float] = None
+    readiness_classification: Optional[str] = None
+    is_good: Optional[bool] = None
+    questions_count: int = 0
+    answered_count: int = 0
+    top_strength: Optional[str] = None
+    top_weakness: Optional[str] = None
+
+
+class InterviewHistorySummary(BaseModel):
+    total_interviews: int
+    good_interviews_count: int
+    bad_interviews_count: int
+    in_progress_count: int
+    average_score: float
+    history: List[InterviewHistoryItem]
+

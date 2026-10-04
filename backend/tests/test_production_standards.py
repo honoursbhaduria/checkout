@@ -385,3 +385,48 @@ async def test_standard_10_ai_router_and_provider_abstraction():
     assert "difficulty" in q_data
     assert q_data["difficulty"] == 5
 
+
+@pytest.mark.asyncio
+async def test_standard_11_interview_history_aggregation():
+    """Verify interview history endpoint returns correct summary metrics, Good/Bad categorization, and attempt details."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as ac:
+        login_res = await ac.post("/api/v1/auth/login", json={
+            "email": "candidate@studentcredibility.com",
+            "password": "accelerator123"
+        })
+        assert login_res.status_code == 200
+        token = login_res.json()["data"]["tokens"]["access_token"]
+        headers = {"Authorization": f"Bearer {token}"}
+
+        # Query history
+        hist_res = await ac.get("/api/v1/interviews/history", headers=headers)
+        assert hist_res.status_code == 200
+        body = hist_res.json()
+        assert body["success"] is True
+        data = body["data"]
+
+        # Validate history summary structure
+        assert "total_interviews" in data
+        assert "good_interviews_count" in data
+        assert "bad_interviews_count" in data
+        assert "in_progress_count" in data
+        assert "average_score" in data
+        assert "history" in data
+        assert isinstance(data["history"], list)
+
+        # Check tally integrity
+        assert data["total_interviews"] == data["good_interviews_count"] + data["bad_interviews_count"] + data["in_progress_count"]
+
+        # Check individual history items if interviews exist
+        for item in data["history"]:
+            assert "interview_id" in item
+            assert "job_title" in item
+            assert "status" in item
+            if item["overall_score"] is not None:
+                assert 0.0 <= item["overall_score"] <= 100.0
+                if item["overall_score"] >= 70.0:
+                    assert item["is_good"] is True
+                else:
+                    assert item["is_good"] is False
+

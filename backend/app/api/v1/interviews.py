@@ -5,7 +5,8 @@ from app.core.database import get_db
 from app.domain.schemas import (
     InterviewCreate, InterviewResponse, QuestionResponse,
     AnswerSubmitRequest, AnswerEvaluationResponse,
-    InterviewReportResponse, PreparationPlanResponse, APIResponse
+    InterviewReportResponse, PreparationPlanResponse, APIResponse,
+    InterviewHistorySummary
 )
 from app.application.services.interview_service import InterviewService
 from app.application.services.report_service import ReportService
@@ -13,6 +14,16 @@ from app.api.dependencies import get_current_user
 from app.infrastructure.models.models import User
 
 router = APIRouter(prefix="/interviews", tags=["Interviews"])
+
+
+@router.get("/history", response_model=APIResponse[InterviewHistorySummary])
+async def get_interview_history(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = InterviewService(db)
+    history = await service.get_interview_history(user.id)
+    return APIResponse(data=history)
 
 
 @router.post("", response_model=APIResponse[InterviewResponse], status_code=status.HTTP_201_CREATED)

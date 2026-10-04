@@ -18,7 +18,10 @@ import {
   FileCheck,
   ChevronDown,
   ChevronUp,
-  Sparkles
+  Sparkles,
+  History,
+  ThumbsUp,
+  ThumbsDown,
 } from "lucide-react";
 
 import {
@@ -30,6 +33,7 @@ import {
   type AnswerEvaluation,
   type ReportData,
   type PreparationPlanData,
+  type InterviewHistorySummary,
 } from "./lib/api";
 
 import { IndustrialButton } from "./components/ui/IndustrialButton";
@@ -81,32 +85,48 @@ RAG-Powered Intelligent Document Copilot
 - Built full-stack retrieval-augmented generation system indexing 500+ research papers in Qdrant vector database.
 - Integrated streaming speech-to-text allowing real-time voice queries and answers.`;
 
+const STORAGE_KEY = "checkout_industrial_interview_state_v1";
+
+const getSavedState = () => {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch (e) {
+    console.error("Failed to load saved state:", e);
+  }
+  return null;
+};
+
 export function App() {
-  const [activeTab, setActiveTab] = useState<"ingest" | "role" | "fit" | "interview" | "report">("ingest");
+  const saved = getSavedState();
+
+  const [activeTab, setActiveTab] = useState<"ingest" | "role" | "fit" | "interview" | "report" | "history">(
+    saved?.activeTab || "ingest"
+  );
   const [loading, setLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
   // Form states
-  const [jdTitle, setJdTitle] = useState("AI Engineer Intern");
-  const [jdCompany, setJdCompany] = useState("Student Credibility");
-  const [jdText, setJdText] = useState(SAMPLE_JD);
+  const [jdTitle, setJdTitle] = useState(saved?.jdTitle || "AI Engineer Intern");
+  const [jdCompany, setJdCompany] = useState(saved?.jdCompany || "Student Credibility");
+  const [jdText, setJdText] = useState(saved?.jdText || SAMPLE_JD);
   const [jdFile, setJdFile] = useState<File | null>(null);
-  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">("paste");
-  const [resumeText, setResumeText] = useState(SAMPLE_RESUME);
-  const [candidateName, setCandidateName] = useState("Honours Bhadauria");
+  const [jdInputMode, setJdInputMode] = useState<"paste" | "upload">(saved?.jdInputMode || "paste");
+  const [resumeText, setResumeText] = useState(saved?.resumeText || SAMPLE_RESUME);
+  const [candidateName, setCandidateName] = useState(saved?.candidateName || "Honours Bhadauria");
   const [resumeFile, setResumeFile] = useState<File | null>(null);
-  const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">("upload");
+  const [resumeInputMode, setResumeInputMode] = useState<"upload" | "paste">(saved?.resumeInputMode || "upload");
   const [showChunksDrawer, setShowChunksDrawer] = useState<boolean>(false);
 
-  const [job, setJob] = useState<Job | null>(null);
-  const [resume, setResume] = useState<Resume | null>(null);
-  const [jobFit, setJobFit] = useState<JobFitResult | null>(null);
+  const [job, setJob] = useState<Job | null>(saved?.job || null);
+  const [resume, setResume] = useState<Resume | null>(saved?.resume || null);
+  const [jobFit, setJobFit] = useState<JobFitResult | null>(saved?.jobFit || null);
 
   // Interview simulator states
-  const [interviewId, setInterviewId] = useState<string | null>(null);
-  const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(null);
-  const [candidateAnswer, setCandidateAnswer] = useState<string>("");
-  const [latestEvaluation, setLatestEvaluation] = useState<AnswerEvaluation | null>(null);
+  const [interviewId, setInterviewId] = useState<string | null>(saved?.interviewId || null);
+  const [currentQuestion, setCurrentQuestion] = useState<QuestionData | null>(saved?.currentQuestion || null);
+  const [candidateAnswer, setCandidateAnswer] = useState<string>(saved?.candidateAnswer || "");
+  const [latestEvaluation, setLatestEvaluation] = useState<AnswerEvaluation | null>(saved?.latestEvaluation || null);
   const [isSpeakingQuestion, setIsSpeakingQuestion] = useState<boolean>(false);
   const [isListeningMic, setIsListeningMic] = useState<boolean>(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
@@ -120,12 +140,131 @@ export function App() {
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   // Report states
-  const [report, setReport] = useState<ReportData | null>(null);
-  const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(null);
+  const [report, setReport] = useState<ReportData | null>(saved?.report || null);
+  const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(saved?.prepPlan || null);
+
+  // History state
+  const [historySummary, setHistorySummary] = useState<InterviewHistorySummary | null>(null);
+  const [historyFilter, setHistoryFilter] = useState<"all" | "good" | "bad">("all");
+  const [loadingHistory, setLoadingHistory] = useState<boolean>(false);
+
+  // Synchronize state changes to localStorage so page refresh never loses progress
+  useEffect(() => {
+    try {
+      const stateToPersist = {
+        activeTab,
+        job,
+        resume,
+        jobFit,
+        interviewId,
+        currentQuestion,
+        candidateAnswer,
+        latestEvaluation,
+        report,
+        prepPlan,
+        jdTitle,
+        jdCompany,
+        jdText,
+        candidateName,
+        resumeText,
+        jdInputMode,
+        resumeInputMode,
+      };
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(stateToPersist));
+    } catch (e) {
+      console.warn("Storage write error:", e);
+    }
+  }, [
+    activeTab,
+    job,
+    resume,
+    jobFit,
+    interviewId,
+    currentQuestion,
+    candidateAnswer,
+    latestEvaluation,
+    report,
+    prepPlan,
+    jdTitle,
+    jdCompany,
+    jdText,
+    candidateName,
+    resumeText,
+    jdInputMode,
+    resumeInputMode,
+  ]);
+
+  const fetchHistory = async () => {
+    try {
+      setLoadingHistory(true);
+      const summary = await api.getInterviewHistory();
+      setHistorySummary(summary);
+    } catch (e) {
+      console.warn("Could not fetch interview history:", e);
+    } finally {
+      setLoadingHistory(false);
+    }
+  };
 
   useEffect(() => {
-    api.loginDemo().catch((e) => console.log("Demo auth init:", e));
+    api.loginDemo()
+      .then(() => fetchHistory())
+      .catch((e) => console.log("Demo auth init:", e));
   }, []);
+
+  const handleResetSession = () => {
+    if (window.confirm("RESET TELEMETRY SESSION: This will flush current job and resume cache to allow testing a new profile. Proceed?")) {
+      try {
+        localStorage.removeItem(STORAGE_KEY);
+      } catch {}
+      setJob(null);
+      setResume(null);
+      setJobFit(null);
+      setInterviewId(null);
+      setCurrentQuestion(null);
+      setCandidateAnswer("");
+      setLatestEvaluation(null);
+      setReport(null);
+      setPrepPlan(null);
+      setActiveTab("ingest");
+    }
+  };
+
+  const handleViewPastReport = async (pastInterviewId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const [pastReport, pastPlan] = await Promise.all([
+        api.getReport(pastInterviewId),
+        api.getPreparationPlan(pastInterviewId).catch(() => null),
+      ]);
+      setInterviewId(pastInterviewId);
+      setReport(pastReport);
+      setPrepPlan(pastPlan);
+      setActiveTab("report");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to load report for this interview");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleResumeInterview = async (pastInterviewId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const q = await api.getCurrentQuestion(pastInterviewId);
+      setInterviewId(pastInterviewId);
+      setCurrentQuestion(q);
+      setActiveTab("interview");
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err: any) {
+      setError(err.message || "Failed to resume interview");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const speakText = (text: string) => {
     if (!ttsEnabled || !("speechSynthesis" in window)) return;
@@ -443,6 +582,7 @@ export function App() {
       setReport(rep);
       setPrepPlan(plan);
       setActiveTab("report");
+      fetchHistory();
 
       confetti({
         particleCount: 90,
@@ -488,62 +628,95 @@ export function App() {
           </div>
 
           {/* Stage Buttons */}
-          <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+          <div className="flex items-center gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+            <nav className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto w-full md:w-auto pb-1 sm:pb-0 no-scrollbar shrink-0">
+              <button
+                onClick={() => setActiveTab("ingest")}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer ${
+                  activeTab === "ingest"
+                    ? "bg-[#2d3436] text-white shadow-sharp"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                01 // INGEST
+              </button>
+              <button
+                onClick={() => setActiveTab("role")}
+                disabled={!job}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
+                  activeTab === "role"
+                    ? "bg-[#2d3436] text-white shadow-sharp"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                02 // ROLE_SPEC
+              </button>
+              <button
+                onClick={() => setActiveTab("fit")}
+                disabled={!jobFit}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
+                  activeTab === "fit"
+                    ? "bg-[#2d3436] text-white shadow-sharp"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                03 // FIT_SCORE
+              </button>
+              <button
+                onClick={() => setActiveTab("interview")}
+                disabled={!currentQuestion}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
+                  activeTab === "interview"
+                    ? "bg-safety text-white shadow-safety"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                04 // SIMULATOR
+              </button>
+              <button
+                onClick={() => setActiveTab("report")}
+                disabled={!report}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
+                  activeTab === "report"
+                    ? "bg-[#10b981] text-white shadow-sharp"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                05 // TELEMETRY
+              </button>
+              <button
+                onClick={() => {
+                  setActiveTab("history");
+                  fetchHistory();
+                }}
+                className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer flex items-center gap-1.5 ${
+                  activeTab === "history"
+                    ? "bg-[#8b5cf6] text-white shadow-sharp"
+                    : "bg-chassis text-ink shadow-floating hover:text-safety"
+                }`}
+              >
+                <History className="w-3.5 h-3.5" />
+                <span>06 // HISTORY</span>
+                {historySummary && (
+                  <span className={`text-[10px] px-1 py-0.2 rounded font-mono font-bold ${
+                    activeTab === "history" ? "bg-white text-[#8b5cf6]" : "bg-[#2d3436] text-white"
+                  }`}>
+                    {historySummary.total_interviews}
+                  </span>
+                )}
+              </button>
+            </nav>
+
             <button
-              onClick={() => setActiveTab("ingest")}
-              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer ${
-                activeTab === "ingest"
-                  ? "bg-[#2d3436] text-white shadow-sharp"
-                  : "bg-chassis text-ink shadow-floating hover:text-safety"
-              }`}
+              type="button"
+              onClick={handleResetSession}
+              title="Reset telemetry cache"
+              className="font-mono text-xs uppercase px-2 py-1.5 rounded-md bg-chassis text-ink shadow-floating hover:text-safety border border-white/40 mechanical-transition cursor-pointer shrink-0 flex items-center gap-1 ml-1"
             >
-              01 // INGEST
+              <RotateCcw className="w-3 h-3" />
+              <span className="hidden sm:inline">RESET</span>
             </button>
-            <button
-              onClick={() => setActiveTab("role")}
-              disabled={!job}
-              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
-                activeTab === "role"
-                  ? "bg-[#2d3436] text-white shadow-sharp"
-                  : "bg-chassis text-ink shadow-floating hover:text-safety"
-              }`}
-            >
-              02 // ROLE_SPEC
-            </button>
-            <button
-              onClick={() => setActiveTab("fit")}
-              disabled={!jobFit}
-              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
-                activeTab === "fit"
-                  ? "bg-[#2d3436] text-white shadow-sharp"
-                  : "bg-chassis text-ink shadow-floating hover:text-safety"
-              }`}
-            >
-              03 // FIT_SCORE
-            </button>
-            <button
-              onClick={() => setActiveTab("interview")}
-              disabled={!currentQuestion}
-              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
-                activeTab === "interview"
-                  ? "bg-safety text-white shadow-safety"
-                  : "bg-chassis text-ink shadow-floating hover:text-safety"
-              }`}
-            >
-              04 // SIMULATOR
-            </button>
-            <button
-              onClick={() => setActiveTab("report")}
-              disabled={!report}
-              className={`font-mono text-xs uppercase px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-md mechanical-transition whitespace-nowrap cursor-pointer disabled:opacity-40 ${
-                activeTab === "report"
-                  ? "bg-[#10b981] text-white shadow-sharp"
-                  : "bg-chassis text-ink shadow-floating hover:text-safety"
-              }`}
-            >
-              05 // TELEMETRY
-            </button>
-          </nav>
+          </div>
         </div>
       </header>
 
@@ -1330,6 +1503,221 @@ export function App() {
                 </div>
               </div>
             )}
+          </div>
+        )}
+
+        {/* TAB 6: HISTORY & TELEMETRY ARCHIVE */}
+        {activeTab === "history" && (
+          <div className="space-y-8">
+            <div className="border-b border-[#a3b1c6]/40 pb-4">
+              <span className="font-mono text-xs uppercase text-safety block mb-1">
+                MODULE 06 // HISTORICAL TELEMETRY LOGS
+              </span>
+              <h2 className="font-mono text-2xl md:text-3xl font-bold uppercase tracking-tight text-ink">
+                Interview Performance Archive
+              </h2>
+              <p className="font-mono text-xs text-inkMuted mt-1">
+                Persistent audit of all past simulation rounds — monitor readiness trends and competency calibrations.
+              </p>
+            </div>
+
+            {/* Metric Summary Grid */}
+            {historySummary && (
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <IndustrialCard title="TOTAL SIMULATIONS" subtitle="LOGGED RUNS">
+                  <span className="font-mono text-3xl font-bold text-ink block mt-1">
+                    {historySummary.total_interviews}
+                  </span>
+                  <span className="font-mono text-[10px] text-inkMuted uppercase">AUDIT TRAIL ACTIVE</span>
+                </IndustrialCard>
+
+                <IndustrialCard title="GOOD ATTEMPTS" subtitle="READY / STRONG">
+                  <div className="flex items-center gap-2 mt-1">
+                    <ThumbsUp className="w-5 h-5 text-[#10b981]" />
+                    <span className="font-mono text-3xl font-bold text-[#10b981]">
+                      {historySummary.good_interviews_count}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-[#10b981] uppercase font-bold">≥ 70% CALIBRATION</span>
+                </IndustrialCard>
+
+                <IndustrialCard title="NEEDS WORK" subtitle="GAPS DETECTED">
+                  <div className="flex items-center gap-2 mt-1">
+                    <ThumbsDown className="w-5 h-5 text-safety" />
+                    <span className="font-mono text-3xl font-bold text-safety">
+                      {historySummary.bad_interviews_count}
+                    </span>
+                  </div>
+                  <span className="font-mono text-[10px] text-safety uppercase font-bold">&lt; 70% CALIBRATION</span>
+                </IndustrialCard>
+
+                <IndustrialCard title="MEAN SCORE" subtitle="OVERALL AVERAGE">
+                  <span className="font-mono text-3xl font-bold text-ink block mt-1">
+                    {historySummary.average_score}%
+                  </span>
+                  <span className="font-mono text-[10px] text-inkMuted uppercase">NORMALIZED METRIC</span>
+                </IndustrialCard>
+              </div>
+            )}
+
+            {/* Filters and Refresh */}
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => setHistoryFilter("all")}
+                  className={`font-mono text-xs uppercase px-3 py-1.5 rounded-md mechanical-transition cursor-pointer ${
+                    historyFilter === "all"
+                      ? "bg-[#2d3436] text-white shadow-sharp"
+                      : "bg-chassis text-ink shadow-floating hover:text-safety"
+                  }`}
+                >
+                  ALL SESSIONS ({historySummary?.total_interviews || 0})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter("good")}
+                  className={`font-mono text-xs uppercase px-3 py-1.5 rounded-md mechanical-transition cursor-pointer flex items-center gap-1.5 ${
+                    historyFilter === "good"
+                      ? "bg-[#10b981] text-white shadow-sharp"
+                      : "bg-chassis text-[#10b981] shadow-floating hover:text-ink"
+                  }`}
+                >
+                  <ThumbsUp className="w-3.5 h-3.5" />
+                  GOOD ({historySummary?.good_interviews_count || 0})
+                </button>
+                <button
+                  onClick={() => setHistoryFilter("bad")}
+                  className={`font-mono text-xs uppercase px-3 py-1.5 rounded-md mechanical-transition cursor-pointer flex items-center gap-1.5 ${
+                    historyFilter === "bad"
+                      ? "bg-safety text-white shadow-safety"
+                      : "bg-chassis text-safety shadow-floating hover:text-ink"
+                  }`}
+                >
+                  <ThumbsDown className="w-3.5 h-3.5" />
+                  NEEDS WORK ({historySummary?.bad_interviews_count || 0})
+                </button>
+              </div>
+
+              <button
+                onClick={fetchHistory}
+                disabled={loadingHistory}
+                className="font-mono text-xs uppercase px-3 py-1.5 rounded-md bg-chassis text-ink shadow-floating hover:text-safety border border-white/40 mechanical-transition cursor-pointer flex items-center gap-1.5"
+              >
+                <RotateCcw className={`w-3 h-3 ${loadingHistory ? "animate-spin" : ""}`} />
+                <span>{loadingHistory ? "QUERYING DB..." : "POLL ARCHIVE"}</span>
+              </button>
+            </div>
+
+            {/* Past attempts list */}
+            <div className="space-y-4">
+              {(!historySummary || historySummary.history.length === 0) ? (
+                <IndustrialCard title="NO SIMULATION LOGS FOUND" subtitle="STATUS: IDLE">
+                  <p className="font-mono text-xs text-inkMuted mb-4">
+                    No completed interviews detected in database. Complete a simulator run to generate telemetry history.
+                  </p>
+                  <IndustrialButton variant="primary" onClick={() => setActiveTab("ingest")}>
+                    INITIALIZE NEW INTERVIEW
+                  </IndustrialButton>
+                </IndustrialCard>
+              ) : (
+                historySummary.history
+                  .filter((item) => {
+                    if (historyFilter === "good") return item.is_good === true;
+                    if (historyFilter === "bad") return item.is_good === false;
+                    return true;
+                  })
+                  .map((item) => (
+                    <IndustrialCard
+                      key={item.interview_id}
+                      title={item.job_title}
+                      subtitle={`${item.company_name.toUpperCase()} // ${item.status}`}
+                    >
+                      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 pb-3 border-b border-white/40">
+                        <div>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="font-mono text-xs text-inkMuted">
+                              CANDIDATE: <strong>{item.candidate_name}</strong>
+                            </span>
+                            <span className="font-mono text-xs text-inkMuted">•</span>
+                            <span className="font-mono text-xs text-inkMuted">
+                              {new Date(item.created_at).toLocaleDateString()} {new Date(item.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                            </span>
+                            <span className="font-mono text-xs text-inkMuted">•</span>
+                            <span className="font-mono text-xs text-inkMuted">
+                              {item.answered_count} / {item.questions_count || 9} ANSWERS
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-3 shrink-0">
+                          {item.overall_score !== null && (
+                            <div className="text-right">
+                              <span className="font-mono text-[10px] text-inkMuted uppercase block">SCORE</span>
+                              <span className="font-mono text-2xl font-bold text-ink">
+                                {item.overall_score}%
+                              </span>
+                            </div>
+                          )}
+
+                          {item.is_good === true ? (
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-[#10b981] text-white shadow-sharp uppercase flex items-center gap-1">
+                              <ThumbsUp className="w-3 h-3" /> READY
+                            </span>
+                          ) : item.is_good === false ? (
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-safety text-white shadow-safety uppercase flex items-center gap-1">
+                              <ThumbsDown className="w-3 h-3" /> GAPS
+                            </span>
+                          ) : (
+                            <span className="font-mono text-xs font-bold px-2.5 py-1 rounded bg-[#2d3436] text-white uppercase">
+                              IN PROGRESS
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {(item.top_strength || item.top_weakness) && (
+                        <div className="grid sm:grid-cols-2 gap-2 mt-3 pt-2 font-mono text-xs">
+                          {item.top_strength && (
+                            <div className="p-2 bg-chassis rounded border border-[#10b981]/30">
+                              <strong className="text-[#10b981]">[+] STRENGTH: </strong>
+                              <span className="text-ink">{item.top_strength}</span>
+                            </div>
+                          )}
+                          {item.top_weakness && (
+                            <div className="p-2 bg-chassis rounded border border-safety/30">
+                              <strong className="text-safety">[-] VULNERABILITY: </strong>
+                              <span className="text-ink">{item.top_weakness}</span>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      <div className="flex justify-end gap-2 mt-3 pt-3 border-t border-white/40">
+                        {item.status === "COMPLETED" || item.overall_score !== null ? (
+                          <IndustrialButton
+                            variant="primary"
+                            size="sm"
+                            onClick={() => handleViewPastReport(item.interview_id)}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              LOAD DIAGNOSTIC TELEMETRY <ArrowRight className="w-3.5 h-3.5" />
+                            </span>
+                          </IndustrialButton>
+                        ) : (
+                          <IndustrialButton
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => handleResumeInterview(item.interview_id)}
+                          >
+                            <span className="flex items-center gap-1.5">
+                              RESUME SESSION <Play className="w-3.5 h-3.5" />
+                            </span>
+                          </IndustrialButton>
+                        )}
+                      </div>
+                    </IndustrialCard>
+                  ))
+              )}
+            </div>
           </div>
         )}
       </main>
