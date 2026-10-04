@@ -119,6 +119,8 @@ export function App() {
   const micStreamRef = useRef<MediaStream | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const liveIntervalRef = useRef<any>(null);
+  const isTranscribingSliceRef = useRef<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
 
   // Report state
@@ -198,43 +200,67 @@ export function App() {
     // 1. Request real hardware microphone access and begin MediaRecorder capture
     let stream: MediaStream | null = null;
     try {
-      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        micStreamRef.current = stream;
-        setIsListeningMic(true);
-        setError(null);
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error("getUserMedia is not supported on this browser");
+      }
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      micStreamRef.current = stream;
+      setIsListeningMic(true);
+      setError(null);
 
-        try {
-          audioChunksRef.current = [];
-          const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
-            ? "audio/webm;codecs=opus"
-            : MediaRecorder.isTypeSupported("audio/webm")
-            ? "audio/webm"
-            : MediaRecorder.isTypeSupported("audio/ogg")
-            ? "audio/ogg"
-            : "";
-          const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
-          mr.ondataavailable = (e) => {
-            if (e.data && e.data.size > 0) {
-              audioChunksRef.current.push(e.data);
+      try {
+        audioChunksRef.current = [];
+        const mime = MediaRecorder.isTypeSupported("audio/webm;codecs=opus")
+          ? "audio/webm;codecs=opus"
+          : MediaRecorder.isTypeSupported("audio/webm")
+          ? "audio/webm"
+          : MediaRecorder.isTypeSupported("audio/ogg")
+          ? "audio/ogg"
+          : "";
+        const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        mr.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+        mr.start(400);
+        mediaRecorderRef.current = mr;
+
+        // Live real-time audio transcription interval: sends accumulated audio slice every 1.5 seconds
+        if (liveIntervalRef.current) clearInterval(liveIntervalRef.current);
+        liveIntervalRef.current = setInterval(async () => {
+          if (audioChunksRef.current.length >= 2 && !isTranscribingSliceRef.current) {
+            const currentBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
+            if (currentBlob.size > 800) {
+              try {
+                isTranscribingSliceRef.current = true;
+                const partial = await api.transcribeAudioFile(currentBlob);
+                if (partial && partial.trim()) {
+                  setCandidateAnswer(partial.trim());
+                }
+              } catch (e) {
+                console.warn("Live slice STT error:", e);
+              } finally {
+                isTranscribingSliceRef.current = false;
+              }
             }
-          };
-          mr.start(250);
-          mediaRecorderRef.current = mr;
-        } catch (recErr) {
-          console.warn("MediaRecorder setup notice:", recErr);
-        }
+          }
+        }, 1500);
+      } catch (recErr) {
+        console.warn("MediaRecorder setup notice:", recErr);
       }
     } catch (micErr: any) {
       console.warn("Microphone hardware access notice:", micErr);
+      setIsListeningMic(false);
       if (micErr.name === "NotAllowedError" || micErr.name === "PermissionDeniedError") {
         setError("Microphone permission denied by browser. Please allow microphone in your URL bar, or click 'Quick Voice Sample'.");
-        setIsListeningMic(false);
-        return;
+      } else if (micErr.name === "NotFoundError" || micErr.name === "DevicesNotFoundError") {
+        setError("Microphone hardware device not found. Please connect a microphone or click 'Quick Voice Sample'.");
+      } else {
+        setError(`Microphone access error (${micErr.name || "unavailable"}). Please use 'Quick Voice Sample' or type your response.`);
       }
+      return;
     }
-
-    setIsListeningMic(true);
 
     if (isSpeakingQuestion && "speechSynthesis" in window) {
       window.speechSynthesis.cancel();
@@ -285,6 +311,11 @@ export function App() {
   };
 
   const stopMicListening = () => {
+    if (liveIntervalRef.current) {
+      clearInterval(liveIntervalRef.current);
+      liveIntervalRef.current = null;
+    }
+
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
     }
@@ -299,23 +330,31 @@ export function App() {
             const transcript = await api.transcribeAudioFile(audioBlob);
             if (transcript && transcript.trim()) {
               setCandidateAnswer(transcript.trim());
-            } else if (!candidateAnswer) {
-              setCandidateAnswer("(Spoken audio captured)");
             }
           } catch (e: any) {
             console.warn("Backend STT error:", e);
           } finally {
             setIsTranscribing(false);
+            if (micStreamRef.current) {
+              micStreamRef.current.getTracks().forEach((track) => track.stop());
+              micStreamRef.current = null;
+            }
+          }
+        } else {
+          if (micStreamRef.current) {
+            micStreamRef.current.getTracks().forEach((track) => track.stop());
+            micStreamRef.current = null;
           }
         }
       };
       try { mr.stop(); } catch {}
+    } else {
+      if (micStreamRef.current) {
+        micStreamRef.current.getTracks().forEach((track) => track.stop());
+        micStreamRef.current = null;
+      }
     }
 
-    if (micStreamRef.current) {
-      micStreamRef.current.getTracks().forEach((track) => track.stop());
-      micStreamRef.current = null;
-    }
     setIsListeningMic(false);
   };
 
@@ -478,9 +517,6 @@ export function App() {
                 <h1 className="font-heading text-3xl md:text-4xl font-bold text-pencil leading-none">
                   Checkout
                 </h1>
-                <span className="text-xs bg-pen text-white px-2 py-0.5 rounded-full border border-pencil font-body uppercase tracking-wider font-bold">
-                  AI Interview Accelerator
-                </span>
               </div>
               <p className="font-body text-base text-pencil/70">
                 Personalized Interview Simulator by Student Credibility
