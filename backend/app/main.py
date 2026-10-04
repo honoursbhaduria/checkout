@@ -134,6 +134,12 @@ async def generic_exception_handler(request: Request, exc: Exception):
 # Include API v1
 app.include_router(api_router, prefix=settings.API_V1_STR)
 
+from app.observability.metrics import get_metrics_response
+
+@app.get("/metrics", tags=["Observability"])
+async def metrics():
+    return get_metrics_response()
+
 
 @app.get("/")
 async def root():
@@ -141,5 +147,6 @@ async def root():
         "service": settings.PROJECT_NAME,
         "version": settings.VERSION,
         "status": "operational",
-        "docs": "/docs"
+        "docs": "/docs",
+        "metrics": "/metrics"
     }

@@ -10,9 +10,17 @@ redis_pool: Optional[aioredis.Redis] = None
 
 import os
 
+def _get_redis_kwargs(max_connections: Optional[int] = None):
+    kwargs = {"decode_responses": True}
+    if max_connections:
+        kwargs["max_connections"] = max_connections
+    if settings.REDIS_URL.startswith("rediss://") or "upstash.io" in settings.REDIS_URL:
+        kwargs["ssl_cert_reqs"] = None
+    return kwargs
+
 async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
     if os.environ.get("TESTING") == "1" or settings.ENVIRONMENT == "test":
-        client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        client = aioredis.from_url(settings.REDIS_URL, **_get_redis_kwargs())
         try:
             yield client
         finally:
@@ -24,8 +32,7 @@ async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
         try:
             redis_pool = aioredis.from_url(
                 settings.REDIS_URL,
-                decode_responses=True,
-                max_connections=20
+                **_get_redis_kwargs(max_connections=20)
             )
             # Test connection
             await redis_pool.ping()
@@ -37,13 +44,12 @@ async def get_redis() -> AsyncGenerator[aioredis.Redis, None]:
 
 async def get_redis_client() -> aioredis.Redis:
     if os.environ.get("TESTING") == "1" or settings.ENVIRONMENT == "test":
-        return aioredis.from_url(settings.REDIS_URL, decode_responses=True)
+        return aioredis.from_url(settings.REDIS_URL, **_get_redis_kwargs())
     global redis_pool
     if redis_pool is None:
         redis_pool = aioredis.from_url(
             settings.REDIS_URL,
-            decode_responses=True,
-            max_connections=20
+            **_get_redis_kwargs(max_connections=20)
         )
     return redis_pool
 

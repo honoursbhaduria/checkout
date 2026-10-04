@@ -1,0 +1,101 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkout_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:secret@postgres:5432/interview_db
+      - REDIS_URL=redis://redis:6379/0
+      - DEFAULT_AI_PROVIDER=mock
+      - GEMINI_API_KEY=${GEMINI_API_KEY:-}
+      - SECRET_KEY=checkout-production-secret-antigravity-2026
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: checkout_worker
+    restart: unless-stopped
+    command: ["celery", "-A", "app.workers.celery_app.celery_app", "worker", "--loglevel=info"]
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://postgres:secret@postgres:5432/interview_db
+      - REDIS_URL=redis://redis:6379/0
+      - DEFAULT_AI_PROVIDER=mock
+    depends_on:
+      - backend
+      - redis
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: checkout_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: secret
+      POSTGRES_DB: interview_db
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    container_name: checkout_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: checkout_qdrant
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrantdata:/qdrant/storage
+
+  nginx:
+    image: nginx:alpine
+    container_name: checkout_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: checkout_prometheus
+    restart: unless-stopped
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+volumes:
+  pgdata:
+  redisdata:
+  qdrantdata:
