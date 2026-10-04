@@ -121,29 +121,85 @@ export function App() {
   const [report, setReport] = useState<ReportData | null>(null);
   const [prepPlan, setPrepPlan] = useState<PreparationPlanData | null>(null);
 
-  // Initialize Speech Recognition & Demo Auth
+  // Initialize Demo Auth
   useEffect(() => {
-    // Attempt automatic login to ensure token is active
     api.loginDemo().catch((e) => console.log("Demo login initialized:", e));
+  }, []);
 
+  // Text-To-Speech for questions
+  const speakText = (text: string) => {
+    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 1.0;
+      utterance.lang = "en-US";
+
+      const voices = window.speechSynthesis.getVoices();
+      const englishVoice = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("David"))) || voices.find((v) => v.lang.startsWith("en"));
+      if (englishVoice) {
+        utterance.voice = englishVoice;
+      }
+
+      utterance.onstart = () => setIsSpeakingQuestion(true);
+      utterance.onend = () => setIsSpeakingQuestion(false);
+      utterance.onerror = () => setIsSpeakingQuestion(false);
+
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn("TTS playback error:", e);
+      setIsSpeakingQuestion(false);
+    }
+  };
+
+  // Start Mic listening with error & permission resilience
+  const startMicListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    if (!SpeechRecognition) {
+      setError("Web Speech API is not supported in this browser. You can type your answer or click 'Quick Voice Sample'.");
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
+      }
+
+      if (isSpeakingQuestion && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        setIsSpeakingQuestion(false);
+      }
+
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "en-US";
 
+      recognition.onstart = () => {
+        setIsListeningMic(true);
+        setError(null);
+      };
+
       recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+        let fullTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript + " ";
         }
-        setCandidateAnswer((prev) => (prev ? `${prev} ${transcript}` : transcript));
+        const clean = fullTranscript.trim();
+        if (clean) {
+          setCandidateAnswer(clean);
+        }
       };
 
       recognition.onerror = (e: any) => {
-        console.warn("Speech recognition error:", e);
+        console.warn("Speech recognition error:", e.error);
         setIsListeningMic(false);
+        if (e.error === "not-allowed" || e.error === "permission-denied") {
+          setError("Microphone permission denied. Please allow microphone access in your browser bar.");
+        } else if (e.error === "network") {
+          setError("Speech recognition network error. You can type or use 'Quick Voice Sample'.");
+        }
       };
 
       recognition.onend = () => {
@@ -151,43 +207,44 @@ export function App() {
       };
 
       recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error("Speech start error:", err);
+      setIsListeningMic(false);
+      setError("Microphone error: " + (err.message || "Failed to start audio capture"));
     }
-  }, []);
+  };
 
-  // Text-To-Speech for questions
-  const speakText = (text: string) => {
-    if (!ttsEnabled || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 1.0;
-    utterance.onstart = () => setIsSpeakingQuestion(true);
-    utterance.onend = () => setIsSpeakingQuestion(false);
-    utterance.onerror = () => setIsSpeakingQuestion(false);
-    window.speechSynthesis.speak(utterance);
+  const stopMicListening = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    setIsListeningMic(false);
   };
 
   const toggleMicListening = () => {
-    if (!recognitionRef.current) {
-      alert("Web Speech API is not supported in this browser. You can type your answer in the text box.");
-      return;
-    }
-
     if (isListeningMic) {
-      recognitionRef.current.stop();
-      setIsListeningMic(false);
+      stopMicListening();
     } else {
-      if (isSpeakingQuestion) {
-        window.speechSynthesis.cancel();
-        setIsSpeakingQuestion(false);
-      }
-      try {
-        recognitionRef.current.start();
-        setIsListeningMic(true);
-      } catch (e) {
-        console.warn(e);
-      }
+      startMicListening();
     }
+  };
+
+  // Quick Voice Sample Generator tailored to current question & Honours Bhadauria background
+  const handleQuickVoiceSample = () => {
+    if (!currentQuestion) return;
+    const comp = currentQuestion.question.competency.toLowerCase();
+    let sample = "";
+    if (comp.includes("role") || comp.includes("screening")) {
+      sample = "I applied for this role because I am passionate about building production AI backend architectures. In my recent work, I built asynchronous REST APIs using FastAPI and PostgreSQL handling 15,000 requests per minute with sub-100ms response times. I also implemented RAG pipelines with Qdrant vector database and Redis semantic caching, which directly aligns with Student Credibility's requirements.";
+    } else if (comp.includes("fastapi") || comp.includes("python") || comp.includes("async")) {
+      sample = "In Python and FastAPI, I utilize AsyncIO non-blocking event loops, Pydantic v2 schemas for strict serialization, and connection pooling with SQLAlchemy. For instance, I optimized database latency by 45% using indexed foreign keys and connection pooling on Neon PostgreSQL.";
+    } else if (comp.includes("rag") || comp.includes("vector") || comp.includes("llm")) {
+      sample = "For our RAG pipelines, I used Qdrant Cloud to index document chunks using 384-dimensional dense embeddings. I implemented semantic section chunking with 80-character overlaps and integrated Redis distributed caching to store frequent prompt query embeddings, reducing latency by 40%.";
+    } else {
+      sample = "In my previous engineering projects, I focused on high-concurrency architecture, robust error handling, automated testing with pytest, and maintaining 99.9% uptime across production Docker containers.";
+    }
+    setCandidateAnswer(sample);
   };
 
   // Step 1 -> Process Job and Resume
@@ -956,23 +1013,43 @@ export function App() {
                     </span>
                   </div>
 
+                  {isListeningMic && (
+                    <div className="flex items-center gap-2 p-3 bg-blue-50 border-2 border-pen rounded-wobbly text-pen text-base font-body animate-pulse mb-3">
+                      <Mic className="w-5 h-5 text-marker animate-bounce" />
+                      <span><strong>Listening to your voice...</strong> Speak your answer now! Transcription updates live below.</span>
+                    </div>
+                  )}
+
                   <HandDrawnTextarea
                     rows={6}
                     value={candidateAnswer}
                     onChange={(e) => setCandidateAnswer(e.target.value)}
-                    placeholder="Click 'Start Speaking' to answer with your microphone, or type your answer here..."
+                    placeholder="Click 'Speak via Microphone' to answer aloud, or use 'Quick Voice Sample', or type your answer here..."
                   />
 
-                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4">
-                    <WobblyButton
-                      variant={isListeningMic ? "danger" : "secondary"}
-                      onClick={toggleMicListening}
-                    >
-                      <span className="flex items-center gap-2">
-                        <Mic className={`w-5 h-5 ${isListeningMic ? "animate-pulse" : ""}`} />
-                        {isListeningMic ? "Stop Speaking" : "Speak via Microphone"}
-                      </span>
-                    </WobblyButton>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-4">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <WobblyButton
+                        variant={isListeningMic ? "danger" : "secondary"}
+                        onClick={toggleMicListening}
+                      >
+                        <span className="flex items-center gap-2">
+                          <Mic className={`w-5 h-5 ${isListeningMic ? "animate-bounce text-white" : ""}`} />
+                          {isListeningMic ? "Stop Speaking" : "Speak via Microphone"}
+                        </span>
+                      </WobblyButton>
+
+                      <WobblyButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleQuickVoiceSample}
+                        title="Auto-fill candidate voice answer tailored to this question"
+                      >
+                        <span className="flex items-center gap-1.5 text-pencil">
+                          <Sparkles className="w-4 h-4 text-marker" /> Quick Voice Sample
+                        </span>
+                      </WobblyButton>
+                    </div>
 
                     <WobblyButton
                       variant="primary"

@@ -17,7 +17,8 @@ import {
   HardDrive,
   FileCheck,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Sparkles
 } from "lucide-react";
 
 import {
@@ -116,61 +117,123 @@ export function App() {
 
   useEffect(() => {
     api.loginDemo().catch((e) => console.log("Demo auth init:", e));
+  }, []);
 
+  const speakText = (text: string) => {
+    if (!ttsEnabled || !("speechSynthesis" in window)) return;
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.rate = 1.0;
+      utterance.pitch = 0.95;
+      utterance.lang = "en-US";
+
+      const voices = window.speechSynthesis.getVoices();
+      const voice = voices.find((v) => v.lang.startsWith("en") && (v.name.includes("Google") || v.name.includes("Natural") || v.name.includes("Samantha") || v.name.includes("David"))) || voices.find((v) => v.lang.startsWith("en"));
+      if (voice) {
+        utterance.voice = voice;
+      }
+
+      utterance.onstart = () => setIsSpeakingQuestion(true);
+      utterance.onend = () => setIsSpeakingQuestion(false);
+      utterance.onerror = () => setIsSpeakingQuestion(false);
+      window.speechSynthesis.speak(utterance);
+    } catch (e) {
+      console.warn("TTS playback error:", e);
+      setIsSpeakingQuestion(false);
+    }
+  };
+
+  const startMicListening = () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
-    if (SpeechRecognition) {
+    if (!SpeechRecognition) {
+      setError("Web Speech API is not supported in this browser. Please type response or click 'AUTO-SIMULATE ANSWER'.");
+      return;
+    }
+
+    try {
+      if (recognitionRef.current) {
+        try { recognitionRef.current.abort(); } catch {}
+      }
+
+      if (isSpeakingQuestion && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        setIsSpeakingQuestion(false);
+      }
+
       const recognition = new SpeechRecognition();
       recognition.continuous = true;
       recognition.interimResults = true;
       recognition.lang = "en-US";
 
-      recognition.onresult = (event: any) => {
-        let transcript = "";
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
-        }
-        setCandidateAnswer((prev) => (prev ? `${prev} ${transcript}` : transcript));
+      recognition.onstart = () => {
+        setIsListeningMic(true);
+        setError(null);
       };
 
-      recognition.onerror = () => setIsListeningMic(false);
-      recognition.onend = () => setIsListeningMic(false);
-      recognitionRef.current = recognition;
-    }
-  }, []);
+      recognition.onresult = (event: any) => {
+        let fullTranscript = "";
+        for (let i = 0; i < event.results.length; i++) {
+          fullTranscript += event.results[i][0].transcript + " ";
+        }
+        const clean = fullTranscript.trim();
+        if (clean) {
+          setCandidateAnswer(clean);
+        }
+      };
 
-  const speakText = (text: string) => {
-    if (!ttsEnabled || !("speechSynthesis" in window)) return;
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.rate = 1.0;
-    utterance.pitch = 0.95;
-    utterance.onstart = () => setIsSpeakingQuestion(true);
-    utterance.onend = () => setIsSpeakingQuestion(false);
-    utterance.onerror = () => setIsSpeakingQuestion(false);
-    window.speechSynthesis.speak(utterance);
+      recognition.onerror = (e: any) => {
+        console.warn("Speech recognition error:", e.error);
+        setIsListeningMic(false);
+        if (e.error === "not-allowed" || e.error === "permission-denied") {
+          setError("Microphone permission denied. Allow audio capture in browser permissions.");
+        } else if (e.error === "network") {
+          setError("Speech recognition network error. Use manual data entry or AUTO-SIMULATE.");
+        }
+      };
+
+      recognition.onend = () => {
+        setIsListeningMic(false);
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch (err: any) {
+      console.error("Speech start error:", err);
+      setIsListeningMic(false);
+      setError("Audio capture failure: " + (err.message || "Unknown error"));
+    }
+  };
+
+  const stopMicListening = () => {
+    if (recognitionRef.current) {
+      try { recognitionRef.current.stop(); } catch {}
+    }
+    setIsListeningMic(false);
   };
 
   const toggleMicListening = () => {
-    if (!recognitionRef.current) {
-      alert("Microphone recognition not supported in browser. Use data slot input.");
-      return;
-    }
-
     if (isListeningMic) {
-      recognitionRef.current.stop();
-      setIsListeningMic(false);
+      stopMicListening();
     } else {
-      if (isSpeakingQuestion) {
-        window.speechSynthesis.cancel();
-        setIsSpeakingQuestion(false);
-      }
-      try {
-        recognitionRef.current.start();
-        setIsListeningMic(true);
-      } catch (e) {
-        console.warn(e);
-      }
+      startMicListening();
     }
+  };
+
+  const handleQuickVoiceSample = () => {
+    if (!currentQuestion) return;
+    const comp = currentQuestion.question.competency.toLowerCase();
+    let sample = "";
+    if (comp.includes("role") || comp.includes("screening")) {
+      sample = "I applied for this role because I am passionate about building production AI backend architectures. In my recent work, I built asynchronous REST APIs using FastAPI and PostgreSQL handling 15,000 requests per minute with sub-100ms response times. I also implemented RAG pipelines with Qdrant vector database and Redis semantic caching, which directly aligns with Student Credibility's requirements.";
+    } else if (comp.includes("fastapi") || comp.includes("python") || comp.includes("async")) {
+      sample = "In Python and FastAPI, I utilize AsyncIO non-blocking event loops, Pydantic v2 schemas for strict serialization, and connection pooling with SQLAlchemy. For instance, I optimized database latency by 45% using indexed foreign keys and connection pooling on Neon PostgreSQL.";
+    } else if (comp.includes("rag") || comp.includes("vector") || comp.includes("llm")) {
+      sample = "For our RAG pipelines, I used Qdrant Cloud to index document chunks using 384-dimensional dense embeddings. I implemented semantic section chunking with 80-character overlaps and integrated Redis distributed caching to store frequent prompt query embeddings, reducing latency by 40%.";
+    } else {
+      sample = "In my previous engineering projects, I focused on high-concurrency architecture, robust error handling, automated testing with pytest, and maintaining 99.9% uptime across production Docker containers.";
+    }
+    setCandidateAnswer(sample);
   };
 
   const handleAnalyzeDocuments = async () => {
@@ -912,21 +975,39 @@ export function App() {
 
                 {/* Candidate Transmission Slot */}
                 <IndustrialCard title="03 // CANDIDATE TRANSMISSION" subtitle="AUDIO STT OR DIRECT DATA ENTRY">
+                  {isListeningMic && (
+                    <div className="flex items-center gap-2 p-2.5 bg-[#2ed573]/15 border border-[#2ed573]/40 rounded-md text-ink font-mono text-xs animate-pulse mb-3">
+                      <Mic className="w-4 h-4 text-safety animate-bounce" />
+                      <span><strong>AUDIO RECEIVER ENGAGED:</strong> Audio stream active. Transcribed phonemes materialize below in real-time.</span>
+                    </div>
+                  )}
+
                   <IndustrialTextarea
                     rows={6}
                     value={candidateAnswer}
                     onChange={(e) => setCandidateAnswer(e.target.value)}
-                    placeholder="CLICK 'AUDIO RECEIVER' OR TYPE CANDIDATE RESPONSE..."
+                    placeholder="ENGAGE 'AUDIO RECEIVER' OR TYPE CANDIDATE RESPONSE..."
                   />
 
-                  <div className="flex flex-wrap items-center justify-between gap-4 mt-4 pt-3 border-t border-[#a3b1c6]/30">
-                    <IndustrialButton
-                      variant={isListeningMic ? "primary" : "secondary"}
-                      onClick={toggleMicListening}
-                    >
-                      <Mic className={`w-4 h-4 ${isListeningMic ? "animate-pulse" : ""}`} />
-                      {isListeningMic ? "HALT AUDIO CAPTURE" : "ENGAGE AUDIO RECEIVER"}
-                    </IndustrialButton>
+                  <div className="flex flex-wrap items-center justify-between gap-3 mt-4 pt-3 border-t border-[#a3b1c6]/30">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <IndustrialButton
+                        variant={isListeningMic ? "primary" : "secondary"}
+                        onClick={toggleMicListening}
+                      >
+                        <Mic className={`w-4 h-4 ${isListeningMic ? "animate-pulse text-safety" : ""}`} />
+                        {isListeningMic ? "HALT AUDIO CAPTURE" : "ENGAGE AUDIO RECEIVER"}
+                      </IndustrialButton>
+
+                      <IndustrialButton
+                        variant="secondary"
+                        size="sm"
+                        onClick={handleQuickVoiceSample}
+                        title="Auto-fill candidate voice answer calibrated to this competency"
+                      >
+                        <Sparkles className="w-3.5 h-3.5 text-safety" /> AUTO-SIMULATE
+                      </IndustrialButton>
+                    </div>
 
                     <IndustrialButton
                       variant="primary"
