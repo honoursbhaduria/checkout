@@ -57,10 +57,21 @@ class JobFitService:
 
         fit_result = self.ai.calculate_job_fit(jd_dict, resume_dict)
 
-        # Enrich matches with semantic vector search from Qdrant Cloud
+        # Enrich matches with semantic vector search from Qdrant Cloud.
+        # Displayed evidence must stay human-readable: never leak raw vector
+        # scores ("Qdrant Vector Match (0.87)") or binary payloads to the UI.
         try:
+            import re as _re
             from app.infrastructure.vector_store.qdrant_client import qdrant_store
             from app.ai.embeddings.local_embeddings import local_embeddings
+            from app.ai.providers.smart_engine import smart_engine as _engine
+
+            def _readable_claim(raw: object) -> str:
+                cleaned = _engine.clean_claim_text(str(raw or ""))
+                if not cleaned or not _engine._is_readable_claim_line(cleaned):
+                    return ""
+                return cleaned
+
             for m in fit_result.get("matches", []):
                 skill = m.get("skill")
                 if skill:
@@ -68,10 +79,19 @@ class JobFitService:
                     search_results = qdrant_store.search("resume_claims", query_vector=vec, limit=1)
                     if search_results and search_results[0]["score"] > 0.5:
                         top = search_results[0]
-                        claim_text = top["payload"].get("claim_text", "")
+                        payload = top.get("payload") or {}
+                        # Support both current ("claim_text") and legacy ("claim") keys.
+                        raw_claim = payload.get("claim_text") or payload.get("claim") or ""
+                        claim_text = _readable_claim(raw_claim)
                         if claim_text:
+                            base = _re.sub(
+                                r"\s*\|\s*Qdrant Vector Match.*$",
+                                "",
+                                str(m.get("resume_evidence") or ""),
+                            ).strip()
                             m["resume_evidence"] = (
-                                f"{m['resume_evidence']} | Qdrant Vector Match ({top['score']:.2f}): \"{claim_text}\""
+                                f"{base} Verified from resume: \"{claim_text}\""
+                                if base else f"Verified from resume: \"{claim_text}\""
                             )
         except Exception:
             pass

@@ -102,6 +102,58 @@ const getSavedState = () => {
   return null;
 };
 
+/**
+ * Format backend evidence strings for human display.
+ * Legacy backend appended raw vector-debug text like:
+ *   ".... | Qdrant Vector Match (0.87): \"<claim>\""
+ * which looks like raw embed data. This splits it into a clean base
+ * sentence plus a quoted resume excerpt, dropping the raw score/jargon.
+ * Also guards against raw PDF binary or float-vector dumps leaking
+ * into the claim-verification UI.
+ */
+const cleanDisplayText = (text: string | undefined | null, maxChars = 280): string => {
+  if (!text) return "";
+  let cleaned = String(text).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
+  cleaned = cleaned.replace(/%PDF[^\s]*/gi, " ").replace(/\s+/g, " ").trim();
+  if (cleaned.length > maxChars) {
+    const cut = cleaned.slice(0, maxChars).rsplit(" ", 1)[0] || cleaned.slice(0, maxChars);
+    cleaned = `${cut.rstrip()}…`;
+  }
+  return cleaned;
+};
+
+const looksLikeRawDump = (text: string | undefined | null): boolean => {
+  if (!text) return true;
+  const s = String(text);
+  const lower = s.toLowerCase();
+  if (["%pdf", "endobj", "xref", "trailer", "obj <<", "/filter"].some((m) => lower.includes(m)))
+    return true;
+  const tokens = s.split(/\s+/);
+  if (tokens.length && Math.max(...tokens.map((t) => t.length)) > 80) return true;
+  if (/^[\[({]?\s*-?\d\.\d+/.test(s.trim()) && (s.match(/,/g) || []).length >= 3) return true;
+  const alpha = (s.match(/[A-Za-z\s]/g) || []).length / Math.max(s.length, 1);
+  return alpha < 0.35;
+};
+
+const parseResumeEvidence = (evidence: string | undefined | null): { base: string; quote?: string } => {
+  if (!evidence) return { base: "" };
+  // Split legacy raw vector-debug suffix.
+  const legacySplit = String(evidence).split(/\s*\|\s*Qdrant Vector Match.*?:\s*/);
+  const baseRaw = legacySplit[0] || "";
+  let quoteRaw: string | undefined;
+  if (legacySplit.length > 1) {
+    quoteRaw = legacySplit.slice(1).join(" ").replace(/^["“”']+|["“”']+$/g, "").trim();
+  } else {
+    // New backend format: '... Verified from resume: "<claim>"'
+    const m = String(evidence).match(/^(.*?)\s*Verified from resume:\s*["“”']?(.*?)["“”']?$/s);
+    if (m) return { base: cleanDisplayText(m[1]), quote: cleanDisplayText(m[2]) || undefined };
+  }
+  const base = cleanDisplayText(baseRaw, 220);
+  let quote = quoteRaw ? cleanDisplayText(quoteRaw.replace(/^["“”']+|["“”']+$/g, ""), 220) : undefined;
+  if (quote && looksLikeRawDump(quote)) quote = undefined;
+  return { base, quote };
+};
+
 export function App() {
   const saved = getSavedState();
 
@@ -1355,17 +1407,36 @@ export function App() {
                   <h3 className="font-heading text-2xl font-bold">Strong Matches (Verified)</h3>
                 </div>
                 <div className="space-y-4">
-                  {jobFit.matches.map((m, i) => (
-                    <div key={i} className="p-3 bg-white border border-pencil rounded-wobbly shadow-sketchSm">
-                      <div className="font-heading text-xl font-bold text-pencil">{m.skill}</div>
-                      <p className="font-body text-base text-pencil/80 mt-1">
-                        <strong>JD:</strong> {m.jd_evidence}
-                      </p>
-                      <p className="font-body text-base text-pen mt-1">
-                        <strong>Resume:</strong> {m.resume_evidence}
-                      </p>
-                    </div>
-                  ))}
+                  {jobFit.matches.map((m, i) => {
+                    const { base, quote } = parseResumeEvidence(m.resume_evidence);
+                    return (
+                      <div key={i} className="p-3 bg-white border border-pencil rounded-wobbly shadow-sketchSm">
+                        <div className="font-heading text-xl font-bold text-pencil">{m.skill}</div>
+                        <p className="font-body text-base text-pencil/80 mt-1">
+                          <strong>JD:</strong> {cleanDisplayText(m.jd_evidence, 220)}
+                        </p>
+                        {base && !looksLikeRawDump(base) && (
+                          <p className="font-body text-base text-pencil/80 mt-1">
+                            <strong>Resume:</strong> {base}
+                          </p>
+                        )}
+                        {quote ? (
+                          <blockquote className="mt-2 border-l-4 border-[#10b981] bg-[#10b981]/5 pl-3 pr-2 py-1.5 rounded-r-wobbly">
+                            <span className="text-xs font-bold uppercase tracking-wide text-[#047857]">
+                              Verified from resume
+                            </span>
+                            <p className="font-body text-base text-pencil italic">“{quote}”</p>
+                          </blockquote>
+                        ) : (
+                          base && (
+                            <p className="font-body text-base text-pen mt-1">
+                              <strong>Resume:</strong> {base}
+                            </p>
+                          )
+                        )}
+                      </div>
+                    );
+                  })}
                 </div>
               </WobblyCard>
 
@@ -1466,7 +1537,9 @@ export function App() {
                       { chunk_index: 0, section: "summary", text: resume?.candidate_name ? `Profile of ${resume.candidate_name}: AI and software engineering background.` : "Summary of candidate technical experience and background.", char_count: 140 },
                       { chunk_index: 1, section: "experience", text: "Production backend engineering with FastAPI, Qdrant vector database, Redis caching, and PostgreSQL database pipelines.", char_count: 220 },
                       { chunk_index: 2, section: "skills", text: "Core technical proficiencies: Python, FastAPI, AsyncIO, PyTorch, RAG architectures, Docker, Backblaze B2, REST APIs.", char_count: 180 }
-                    ]).map((ch, idx) => (
+                    ])
+                      .filter((ch) => !looksLikeRawDump(ch.text))
+                      .map((ch, idx) => (
                       <div key={idx} className="p-3 bg-notebook border-2 border-pencil rounded-wobbly shadow-sketchSm">
                         <div className="flex items-center justify-between gap-2 mb-1.5">
                           <span className="font-heading text-base font-bold text-pencil uppercase tracking-wider">
@@ -1476,8 +1549,8 @@ export function App() {
                             {ch.char_count} chars
                           </span>
                         </div>
-                        <p className="font-body text-sm text-pencil/85 line-clamp-3 bg-white/70 p-2 rounded border border-pencil/20 font-mono">
-                          {ch.text}
+                        <p className="font-body text-sm text-pencil/85 line-clamp-3 bg-white/70 p-2 rounded border border-pencil/20">
+                          {cleanDisplayText(ch.text, 500)}
                         </p>
                         <div className="mt-2 flex items-center justify-between text-xs text-pencil/60">
                           <span>Vector ID: 0x{((idx + 1) * 314159).toString(16).slice(0, 6)}</span>

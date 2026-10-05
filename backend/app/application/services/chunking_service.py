@@ -9,6 +9,26 @@ class ChunkingService:
 
     @staticmethod
     def chunk_resume(text: str, chunk_size: int = 500, overlap: int = 80) -> List[Dict[str, Any]]:
+        # Normalize to human-readable text first so raw PDF binary /
+        # embedding blobs never become indexed "chunks".
+        import re as _re
+        text = _re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", text or "")
+        clean_lines = []
+        for _line in (text or "").split("\n"):
+            _s = _re.sub(r"[ \t\xa0]+", " ", _line).strip()
+            if not _s:
+                continue
+            _tokens = _s.split()
+            if _tokens and len(max(_tokens, key=len)) > 80:
+                continue
+            _low = _s.lower()
+            if any(m in _low for m in ("%pdf", "endobj", "xref", "trailer", "obj <<")):
+                continue
+            clean_lines.append(_s)
+        text = "\n".join(clean_lines)
+        if not text.strip():
+            return []
+
         # Identify section boundaries
         section_headers = [
             (r'(?i)\b(technical\s+skills|skills|technologies|tools)\b', "skills"),

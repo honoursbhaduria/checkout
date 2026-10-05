@@ -33,11 +33,17 @@ def process_resume_claims_task(candidate_name: str, raw_text: str):
     claims = resume_data.get("claims", [])
     points = []
     for idx, c in enumerate(claims):
-        vec = local_embeddings.embed_text(c["claim_text"])
+        # analyze_resume already returns cleaned, human-readable claim_text.
+        claim_text = smart_engine.clean_claim_text(str(c.get("claim_text") or ""))
+        if not claim_text:
+            continue
+        vec = local_embeddings.embed_text(claim_text)
         points.append({
             "id": idx + 1,
             "vector": vec,
-            "payload": {"claim": c["claim_text"], "candidate": candidate_name}
+            # Keep both keys: "claim_text" is the current contract read by
+            # job_fit_service; "claim" is kept for backward compatibility.
+            "payload": {"claim_text": claim_text, "claim": claim_text, "candidate": candidate_name}
         })
     qdrant_store.upsert_vectors("resume_claims", points)
     return {"status": "completed", "claims_indexed": len(points)}

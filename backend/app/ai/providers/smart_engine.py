@@ -84,14 +84,58 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
             "domain_knowledge": ["Distributed Systems", "SaaS Engineering", "AI Acceleration"]
         }
 
+    # Markers that indicate a line is a PDF binary / operator dump, not prose.
+    _BINARY_LINE_MARKERS = (
+        "%pdf", "endobj", "xref", "trailer", "obj <<", "/filter",
+        "/length", "startxref",
+    )
+
+    @staticmethod
+    def clean_claim_text(text: str, max_chars: int = 280) -> str:
+        """Normalize a resume line/claim to human-readable form for display."""
+        if not text:
+            return ""
+        # Strip control chars, collapse whitespace.
+        cleaned = re.sub(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", " ", text)
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        # Remove stray PDF operator fragments if they survived parsing.
+        cleaned = re.sub(r"%PDF[^\s]*", "", cleaned, flags=re.IGNORECASE).strip()
+        cleaned = re.sub(r"\s+", " ", cleaned).strip()
+        # Truncate on a word boundary with an ellipsis.
+        if len(cleaned) > max_chars:
+            cut = cleaned[:max_chars].rsplit(" ", 1)[0] or cleaned[:max_chars]
+            cleaned = cut.rstrip(" ,;:.") + "…"
+        return cleaned
+
+    @classmethod
+    def _is_readable_claim_line(cls, line: str) -> bool:
+        lowered = line.lower()
+        if any(m in lowered for m in cls._BINARY_LINE_MARKERS):
+            return False
+        tokens = line.split()
+        if not tokens:
+            return False
+        # Embedding blobs / base64 with no spaces.
+        if len(max(tokens, key=len)) > 60:
+            return False
+        # Raw float-vector dumps like "[0.12, -0.34, ...]".
+        if re.match(r"^[\[\(\{]?\s*-?\d\.\d+", line.strip()) and line.count(",") >= 3:
+            return False
+        alpha = sum(c.isalpha() or c.isspace() for c in line) / max(len(line), 1)
+        return alpha >= 0.45
+
     # --- Resume Analysis & Claim Extraction ---
     def analyze_resume(self, raw_text: str) -> Dict[str, Any]:
-        text_lower = raw_text.lower()
-        
-        # Name detection
-        first_line = raw_text.strip().split("\n")[0]
-        candidate_name = first_line[:50] if len(first_line) < 50 else "Candidate"
-        
+        text_lower = (raw_text or "").lower()
+
+        # Name detection (first readable line only).
+        candidate_name = "Candidate"
+        for raw_line in (raw_text or "").split("\n"):
+            cleaned_first = self.clean_claim_text(raw_line, max_chars=50)
+            if cleaned_first and self._is_readable_claim_line(cleaned_first):
+                candidate_name = cleaned_first[:50]
+                break
+
         # Skills
         known_skills = [
             "Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Machine Learning",
@@ -102,10 +146,10 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
         if not extracted_skills:
             extracted_skills = ["Python", "REST APIs", "SQL", "Git"]
 
-        # Verifiable Claims Extraction
+        # Verifiable Claims Extraction (human-readable lines only).
         claims: List[Dict[str, Any]] = []
-        lines = [line.strip() for line in raw_text.split("\n") if len(line.strip()) > 20]
-        
+        raw_lines = [line.strip() for line in (raw_text or "").split("\n") if len(line.strip()) > 20]
+
         # Look for quantified statements, metrics, architecture claims
         metric_patterns = [
             (r'(\d+[\%])', "metric"),
@@ -113,7 +157,12 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
             (r'(built|architected|designed|developed|implemented)\s+([a-zA-Z\s]{5,35})', "architecture")
         ]
 
-        for line in lines:
+        for raw_line in raw_lines:
+            line = self.clean_claim_text(raw_line)
+            if not line or len(line) < 20:
+                continue
+            if not self._is_readable_claim_line(line):
+                continue
             for pattern, category in metric_patterns:
                 match = re.search(pattern, line, re.IGNORECASE)
                 if match:
@@ -317,12 +366,23 @@ class SmartIntelligenceEngine(LLMProvider, STTProvider, TTSProvider):
 
         else: # deep_dive
             # Deep-dive targets unverified resume claims & challenges assumptions
-            if claims and any(not c.get("verified") for c in claims):
-                unverified = next(c for c in claims if not c.get("verified"))
+            readable_claims = [
+                c for c in (claims or [])
+                if not c.get("verified")
+                and self.clean_claim_text(str(c.get("claim_text") or ""))
+                and self._is_readable_claim_line(
+                    self.clean_claim_text(str(c.get("claim_text") or ""))
+                )
+            ]
+            if readable_claims:
+                unverified = readable_claims[0]
+                quoted_claim = self.clean_claim_text(
+                    str(unverified.get("claim_text") or "")
+                )
                 comp = "claim_verification"
                 strategy = "challenge_claim"
                 text = (
-                    f"On your resume, you stated: \"{unverified.get('claim_text')}\". "
+                    f"On your resume, you stated: \"{quoted_claim}\". "
                     f"Could you explain exactly how you measured that impact, what the baseline was, and what specific technical hurdles you overcame?"
                 )
             elif previous_answer and len(previous_answer) > 20:

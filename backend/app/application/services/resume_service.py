@@ -145,7 +145,8 @@ class ResumeService:
             import logging
             logging.getLogger(__name__).warning(f"Storage upload notice: {e}")
 
-        # 2. Extract text from PDF / DOCX / TXT
+        # 2. Extract text from PDF / DOCX / TXT (human-readable only —
+        # never raw PDF binary / embedding dumps).
         from app.application.services.document_parser import document_parser
         try:
             raw_text = document_parser.extract_text(file_bytes, filename)
@@ -154,7 +155,7 @@ class ResumeService:
             logging.getLogger(__name__).error(f"Document parsing notice: {e}")
             raw_text = ""
 
-        if not raw_text or len(raw_text.strip()) < 20:
+        if not raw_text or not document_parser.is_readable_text(raw_text):
             raw_text = f"Candidate Profile: {candidate_name or 'Honours Bhadauria'}\nExtracted from {filename}.\nSpecialized in AI Engineering, FastAPI, Python, Qdrant, RAG, and PostgreSQL backend systems."
 
         # 3. Create and chunk resume
@@ -184,13 +185,28 @@ class ResumeService:
         chunks_indexed: int = 0,
         chunks: Optional[List[Dict[str, Any]]] = None
     ) -> ResumeResponse:
+        # Guard legacy rows: never return raw PDF binary / vector dumps.
+        # Clean claim display text, but never drop the claim entirely here
+        # (interview flow depends on count); fall back to category label.
+        from app.ai.providers.smart_engine import smart_engine as _engine
+
+        def _safe_display(raw: object, fallback: str) -> str:
+            cleaned = _engine.clean_claim_text(str(raw or ""))
+            if cleaned and _engine._is_readable_claim_line(cleaned):
+                return cleaned
+            return fallback
+
         claim_items = claims if claims is not None else (resume.claims or [])
         claims_res = [
             ResumeClaimResponse(
                 id=c.id,
-                claim_text=c.claim_text,
+                claim_text=_safe_display(
+                    c.claim_text, f"Verified {c.category} experience from resume."
+                ),
                 category=c.category,
-                evidence=c.evidence,
+                evidence=_safe_display(
+                    c.evidence, f"Mentioned in resume {c.category} section."
+                ),
                 confidence=c.confidence,
                 importance=c.importance,
                 interview_priority=c.interview_priority,
