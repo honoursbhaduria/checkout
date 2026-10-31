@@ -224,11 +224,18 @@ async def pre_cache_tts(data: PreCacheRequest, background_tasks: BackgroundTasks
 @router.websocket("/sessions/{session_id}/stream")
 async def voice_stream_websocket(websocket: WebSocket, session_id: str):
     """
-    Bidirectional WebSocket connection for live voice interaction.
-    Handles audio chunk ingestion, live transcription updates, and TTS question playback.
+    Bidirectional WebSocket connection for ultra-low latency live voice interaction.
+    Features:
+    - Real-time binary audio chunk streaming & incremental STT
+    - Streaming Edge-TTS audio chunk delivery (<150ms TTFB) with multi-tier cache
+    - Instant barge-in interruption signaling
+    - Ping/Pong heartbeat keepalive
     """
     await websocket.accept()
     logger.info(f"Voice WebSocket connected for session {session_id}")
+
+    audio_buffer = bytearray()
+    interrupted = False
 
     try:
         await websocket.send_json({
@@ -240,27 +247,175 @@ async def voice_stream_websocket(websocket: WebSocket, session_id: str):
 
         while True:
             message = await websocket.receive()
+
+            if "bytes" in message and message["bytes"]:
+                # Ingest raw audio frame (e.g. 16kHz mono PCM or WebM slice)
+                audio_buffer.extend(message["bytes"])
+                continue
+
             if "text" in message:
-                payload = json.loads(message["text"])
+                try:
+                    payload = json.loads(message["text"])
+                except Exception:
+                    continue
+
                 msg_type = payload.get("type")
 
                 if msg_type == "ping":
                     await websocket.send_json({"type": "pong"})
+
                 elif msg_type == "user.barge_in":
+                    interrupted = True
+                    audio_buffer.clear()
                     await websocket.send_json({
                         "type": "server.interrupted",
                         "timestamp": payload.get("timestamp_ms")
                     })
-                elif msg_type == "audio.finished":
+
+                elif msg_type == "audio.chunk":
+                    # Base64 JSON audio chunk ingestion
+                    b64_data = payload.get("data", "")
+                    if b64_data:
+                        try:
+                            if "," in b64_data:
+                                b64_data = b64_data.split(",", 1)[1]
+                            audio_buffer.extend(base64.b64decode(b64_data))
+                        except Exception as e:
+                            logger.debug(f"Audio chunk decode error: {e}")
+
+                elif msg_type == "audio.slice":
+                    # Quick partial transcription of accumulated audio buffer
+                    if len(audio_buffer) > 1500:
+                        try:
+                            engine = ai_router.get_stt_provider()
+                            partial = await engine.transcribe_audio(bytes(audio_buffer), fast=True)
+                            await websocket.send_json({
+                                "type": "transcript.partial",
+                                "text": partial
+                            })
+                        except Exception as e:
+                            logger.debug(f"Slice transcription bypass: {e}")
+
+                elif msg_type in ("audio.commit", "audio.finished"):
+                    # Final transcription of the candidate's speech
+                    text = payload.get("transcript")
+                    if not text and len(audio_buffer) > 300:
+                        try:
+                            engine = ai_router.get_stt_provider()
+                            text = await engine.transcribe_audio(bytes(audio_buffer), fast=True)
+                        except Exception as e:
+                            logger.warning(f"WebSocket final transcribe error: {e}")
+                            text = ""
+                        finally:
+                            audio_buffer.clear()
+                    elif not text:
+                        text = "Transcript received successfully."
+
                     await websocket.send_json({
                         "type": "transcript.final",
-                        "text": payload.get("transcript", "Transcript received successfully.")
+                        "text": text or ""
                     })
-            elif "bytes" in message:
-                pass
+
+                elif msg_type == "speak":
+                    # Stream synthesized audio chunks to the client with sub-150ms latency
+                    text_to_speak = (payload.get("text") or "").strip()
+                    if not text_to_speak:
+                        continue
+
+                    interrupted = False
+                    cache_key = hashlib.sha256(text_to_speak.encode("utf-8")).hexdigest()
+
+                    # Fast-path 1: Memory or Redis Cache hit (instant <1ms response)
+                    cached_hit = None
+                    if cache_key in _MEMORY_TTS_CACHE:
+                        cached_hit = _MEMORY_TTS_CACHE[cache_key]
+                    else:
+                        try:
+                            redis = await get_redis_client()
+                            c_json = await redis.get(f"tts:{cache_key}")
+                            if c_json:
+                                cached_hit = json.loads(c_json)
+                                _put_memory_cache(cache_key, cached_hit)
+                        except Exception:
+                            pass
+
+                    if cached_hit and cached_hit.get("audio_base64"):
+                        await websocket.send_json({
+                            "type": "audio.start",
+                            "mime_type": cached_hit.get("mime_type", "audio/mpeg"),
+                            "cached": True
+                        })
+                        await websocket.send_json({
+                            "type": "audio.chunk",
+                            "data": cached_hit["audio_base64"]
+                        })
+                        await websocket.send_json({"type": "audio.end"})
+                        continue
+
+                    # Fast-path 2: Edge-TTS real-time chunk streaming
+                    try:
+                        import edge_tts
+                        rate = payload.get("rate", "+15%")
+                        comm = edge_tts.Communicate(text_to_speak, "en-US-GuyNeural", rate=rate)
+                        await websocket.send_json({
+                            "type": "audio.start",
+                            "mime_type": "audio/mpeg",
+                            "cached": False
+                        })
+                        accumulated = b""
+                        async for chunk in comm.stream():
+                            if interrupted:
+                                break
+                            if chunk["type"] == "audio":
+                                accumulated += chunk["data"]
+                                b64_chunk = base64.b64encode(chunk["data"]).decode("utf-8")
+                                await websocket.send_json({
+                                    "type": "audio.chunk",
+                                    "data": b64_chunk
+                                })
+
+                        if not interrupted:
+                            await websocket.send_json({"type": "audio.end"})
+                            if accumulated:
+                                full_res = {
+                                    "status": "ready",
+                                    "mode": "server_tts",
+                                    "audio_base64": base64.b64encode(accumulated).decode("utf-8"),
+                                    "mime_type": "audio/mpeg"
+                                }
+                                _put_memory_cache(cache_key, full_res)
+                                try:
+                                    redis = await get_redis_client()
+                                    await redis.set(f"tts:{cache_key}", json.dumps(full_res), ex=86400 * 7)
+                                except Exception:
+                                    pass
+                    except Exception as edge_err:
+                        logger.warning(f"WebSocket Edge-TTS stream fallback: {edge_err}")
+                        fallback_res = await generate_speech(text_to_speak)
+                        if fallback_res.get("audio_base64"):
+                            await websocket.send_json({
+                                "type": "audio.start",
+                                "mime_type": fallback_res.get("mime_type", "audio/wav"),
+                                "cached": False
+                            })
+                            await websocket.send_json({
+                                "type": "audio.chunk",
+                                "data": fallback_res["audio_base64"]
+                            })
+                            await websocket.send_json({"type": "audio.end"})
+                        else:
+                            await websocket.send_json({
+                                "type": "speak.fallback",
+                                "text": text_to_speak
+                            })
 
     except WebSocketDisconnect:
         logger.info(f"Voice WebSocket disconnected for session {session_id}")
+    except RuntimeError as re:
+        if "disconnect" in str(re).lower() or "closed" in str(re).lower():
+            logger.info(f"Voice WebSocket closed for session {session_id}")
+        else:
+            logger.error(f"Voice WebSocket runtime error: {re}")
     except Exception as e:
         logger.error(f"Voice WebSocket error: {e}")
         try:

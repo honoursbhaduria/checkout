@@ -434,3 +434,17 @@ class ApiClient {
 }
 
 export const api = new ApiClient();
+
+export function getVoiceWebSocketUrl(sessionId: string): string {
+  const wsProto = typeof window !== "undefined" && window.location.protocol === "https:" ? "wss:" : "ws:";
+  let base = API_BASE;
+  if (base.startsWith("http://")) {
+    base = base.replace("http://", "ws://");
+  } else if (base.startsWith("https://")) {
+    base = base.replace("https://", "wss://");
+  } else if (base.startsWith("/")) {
+    const host = typeof window !== "undefined" ? window.location.host : "localhost:8000";
+    base = `${wsProto}//${host}${base}`;
+  }
+  return `${base}/voice/sessions/${encodeURIComponent(sessionId)}/stream`;
+}

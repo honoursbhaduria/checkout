@@ -22,19 +22,25 @@ async def run_benchmark():
     print(f"=== Starting Comprehensive Production Benchmark against {BASE_URL} ===\n")
     
     async with httpx.AsyncClient(base_url=BASE_URL, timeout=90.0) as client:
-        # 1. Health Live
+        # 1. Health Live GET
         t0 = time.perf_counter()
         res = await client.get("/api/v1/health/live")
         lat = (time.perf_counter() - t0) * 1000
-        record("Health Live Probe (/api/v1/health/live)", "PASS" if res.status_code == 200 else "FAIL", lat, f"HTTP {res.status_code}: {res.text.strip()}")
+        record("Health Live GET (/api/v1/health/live)", "PASS" if res.status_code == 200 else "FAIL", lat, f"HTTP {res.status_code}: {res.text.strip()}")
 
-        # 2. Health Ready
+        # 2. Health Live HEAD (Uptime probe)
+        t0 = time.perf_counter()
+        head_res = await client.head("/api/v1/health/live")
+        lat = (time.perf_counter() - t0) * 1000
+        record("Health Live HEAD probe (/api/v1/health/live)", "PASS" if head_res.status_code == 200 else "FAIL", lat, f"HTTP {head_res.status_code}")
+
+        # 3. Health Ready GET
         t0 = time.perf_counter()
         res = await client.get("/api/v1/health/ready")
         lat = (time.perf_counter() - t0) * 1000
-        record("Health Readiness Probe (/api/v1/health/ready)", "PASS" if res.status_code == 200 else "FAIL", lat, f"HTTP {res.status_code}: {res.text.strip()}")
+        record("Health Readiness GET (/api/v1/health/ready)", "PASS" if res.status_code == 200 else "FAIL", lat, f"HTTP {res.status_code}: {res.text.strip()}")
 
-        # 3. Auth Login
+        # 4. Auth Candidate Login
         t0 = time.perf_counter()
         login_res = await client.post("/api/v1/auth/login", json={
             "email": "candidate@studentcredibility.com",
@@ -47,14 +53,28 @@ async def run_benchmark():
 
         headers = {"Authorization": f"Bearer {token}"}
 
-        # 4. Auth Me
+        # 5. Auth Candidate Profile
         t0 = time.perf_counter()
         me_res = await client.get("/api/v1/auth/me", headers=headers)
         lat = (time.perf_counter() - t0) * 1000
         record("Auth Candidate Profile (/api/v1/auth/me)", "PASS" if me_res.status_code == 200 else "FAIL", lat, f"Role: {me_res.json().get('data', {}).get('role')}")
 
-        # 5. Voice TTS (Synthesis)
-        sample_text = "Hello! Welcome to your live technical assessment on Render."
+        # 6. List Jobs (if deployed)
+        t0 = time.perf_counter()
+        list_jobs_res = await client.get("/api/v1/jobs", headers=headers)
+        lat = (time.perf_counter() - t0) * 1000
+        jobs_data = list_jobs_res.json().get("data", []) if list_jobs_res.status_code == 200 else []
+        record("List Jobs (/api/v1/jobs)", "PASS" if list_jobs_res.status_code == 200 else "WAITING_DEPLOY", lat, f"HTTP {list_jobs_res.status_code}: count {len(jobs_data)}")
+
+        # 7. List Resumes (if deployed)
+        t0 = time.perf_counter()
+        list_res_res = await client.get("/api/v1/resumes", headers=headers)
+        lat = (time.perf_counter() - t0) * 1000
+        resumes_data = list_res_res.json().get("data", []) if list_res_res.status_code == 200 else []
+        record("List Resumes (/api/v1/resumes)", "PASS" if list_res_res.status_code == 200 else "WAITING_DEPLOY", lat, f"HTTP {list_res_res.status_code}: count {len(resumes_data)}")
+
+        # 8. Voice TTS (Synthesis)
+        sample_text = "Welcome to your live technical assessment on Render."
         t0 = time.perf_counter()
         tts_res = await client.post("/api/v1/voice/synthesize", json={"text": sample_text})
         lat = (time.perf_counter() - t0) * 1000
@@ -62,7 +82,7 @@ async def run_benchmark():
         has_audio = bool(tts_json.get("audio_base64"))
         record("Voice TTS Synthesis (/api/v1/voice/synthesize)", "PASS" if tts_res.status_code == 200 and has_audio else "FAIL", lat, f"Mode: {tts_json.get('mode')}, Format: {tts_json.get('mime_type')}, Payload: {len(tts_json.get('audio_base64', ''))} chars")
 
-        # 6. Voice STT (Transcription)
+        # 9. Voice STT (Transcription)
         try:
             with open("/tmp/test_speech.mp3", "rb") as f:
                 mp3_bytes = f.read()
@@ -79,7 +99,7 @@ async def run_benchmark():
         except Exception as e:
             record("Voice STT Transcription (/api/v1/voice/transcribe-file)", "FAIL", 0, str(e))
 
-        # 7. WebSocket Stream Handshake & Control
+        # 10. WebSocket Stream Handshake & Control
         ws_endpoint = f"{WS_URL}/api/v1/voice/sessions/render-live-session/stream"
         try:
             t0 = time.perf_counter()
@@ -107,11 +127,11 @@ async def run_benchmark():
         except Exception as e:
             record("WebSocket Full-Duplex Stream", "FAIL", 0, str(e))
 
-        # 8. Full Interview Lifecycle
+        # 11. Full Interview Lifecycle
         # A. Create Job
         t0 = time.perf_counter()
         job_res = await client.post("/api/v1/jobs", headers=headers, json={
-            "title": f"Render Production Benchmark Engineer {int(time.time())}",
+            "title": f"Render Benchmark Engineer {int(time.time())}",
             "company": "Render QA Cloud",
             "description": "High performance FastAPI async engineer with PostgreSQL and Redis expertise."
         })

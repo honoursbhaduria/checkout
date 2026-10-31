@@ -324,6 +324,14 @@ def test_standard_08_voice_websocket_full_duplex():
         assert final_tx["type"] == "transcript.final"
         assert final_tx["text"] == "Testing voice channel input."
 
+        # Streaming TTS synthesis over WebSocket
+        websocket.send_json({"type": "speak", "text": "Welcome to your streaming interview test."})
+        spk_start = websocket.receive_json()
+        assert spk_start["type"] == "audio.start"
+        spk_chunk = websocket.receive_json()
+        assert spk_chunk["type"] == "audio.chunk"
+        assert len(spk_chunk["data"]) > 0
+
 
 @pytest.mark.asyncio
 async def test_standard_09_jwt_token_security_and_rotation():

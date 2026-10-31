@@ -29,6 +29,7 @@ import {
 
 import {
   api,
+  getVoiceWebSocketUrl,
   type Job,
   type Resume,
   type JobFitResult,
@@ -202,6 +203,74 @@ export function App() {
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
   const ttsBlobCacheRef = useRef<Map<string, string>>(new Map());
   const candidateAnswerRef = useRef<string>(saved?.candidateAnswer || "");
+  const voiceWsRef = useRef<WebSocket | null>(null);
+
+  // Manage persistent low-latency WebSocket connection for the active interview
+  useEffect(() => {
+    if (!interviewId) {
+      if (voiceWsRef.current) {
+        try { voiceWsRef.current.close(); } catch {}
+        voiceWsRef.current = null;
+      }
+      return;
+    }
+
+    try {
+      const wsUrl = getVoiceWebSocketUrl(interviewId);
+      const ws = new WebSocket(wsUrl);
+      ws.binaryType = "arraybuffer";
+
+      ws.onopen = () => {
+        try { ws.send(JSON.stringify({ type: "ping" })); } catch {}
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          if (typeof event.data === "string") {
+            const msg = JSON.parse(event.data);
+            if (msg.type === "transcript.partial" && msg.text) {
+              const cleanPartial = msg.text.trim();
+              if (cleanPartial) {
+                setCandidateAnswer((prev) => {
+                  if (!prev) return cleanPartial;
+                  if (prev.includes(cleanPartial)) return prev;
+                  return `${prev} ${cleanPartial}`.trim();
+                });
+              }
+            } else if (msg.type === "transcript.final" && msg.text) {
+              const cleanFinal = msg.text.trim();
+              if (cleanFinal && cleanFinal !== "Transcript received successfully.") {
+                snapAnswerDisplay(cleanFinal);
+              }
+            }
+          }
+        } catch {
+          // Binary or non-json frame
+        }
+      };
+
+      ws.onerror = (e) => {
+        console.debug("Voice WebSocket notice:", e);
+      };
+
+      ws.onclose = () => {
+        if (voiceWsRef.current === ws) {
+          voiceWsRef.current = null;
+        }
+      };
+
+      voiceWsRef.current = ws;
+
+      return () => {
+        try { ws.close(); } catch {}
+        if (voiceWsRef.current === ws) {
+          voiceWsRef.current = null;
+        }
+      };
+    } catch (e) {
+      console.debug("Voice WebSocket setup notice:", e);
+    }
+  }, [interviewId]);
 
   // Smooth live-transcription display: mic results stream into `candidateAnswer`
   // (target) while `displayedAnswer` eases toward it typewriter-style so text
@@ -670,6 +739,13 @@ export function App() {
         mr.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             audioChunksRef.current.push(e.data);
+            if (voiceWsRef.current && voiceWsRef.current.readyState === WebSocket.OPEN) {
+              e.data.arrayBuffer().then((buf) => {
+                if (voiceWsRef.current?.readyState === WebSocket.OPEN) {
+                  voiceWsRef.current.send(buf);
+                }
+              }).catch(() => {});
+            }
           }
         };
         mr.start(400);
@@ -726,6 +802,11 @@ export function App() {
 
     if (isSpeakingQuestion) {
       stopSpeaking();
+      if (voiceWsRef.current && voiceWsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          voiceWsRef.current.send(JSON.stringify({ type: "user.barge_in", timestamp_ms: Date.now() }));
+        } catch {}
+      }
     }
 
     // 2. Start Web Speech recognition if supported for real-time live typing
@@ -787,6 +868,12 @@ export function App() {
 
     if (recognitionRef.current) {
       try { recognitionRef.current.stop(); } catch {}
+    }
+
+    if (voiceWsRef.current && voiceWsRef.current.readyState === WebSocket.OPEN) {
+      try {
+        voiceWsRef.current.send(JSON.stringify({ type: "audio.commit" }));
+      } catch {}
     }
 
     // Immediately release hardware mic tracks so OS indicator turns off instantly
