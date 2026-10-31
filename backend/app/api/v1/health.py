@@ -8,12 +8,12 @@ from app.core.redis import get_redis_client
 router = APIRouter(prefix="/health", tags=["Health Checks"])
 
 
-@router.get("/live", status_code=status.HTTP_200_OK)
+@router.api_route("/live", methods=["GET", "HEAD"], status_code=status.HTTP_200_OK)
 async def liveness():
     return {"status": "alive", "service": "checkout"}
 
 
-@router.get("/ready")
+@router.api_route("/ready", methods=["GET", "HEAD"])
 async def readiness(db: AsyncSession = Depends(get_db)):
     health_status = {
         "database": "unknown",

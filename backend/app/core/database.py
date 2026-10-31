@@ -27,7 +27,8 @@ engine = create_async_engine(
     future=True,
     connect_args=connect_args,
     poolclass=NullPool if is_test else None,
-    pool_pre_ping=False if is_test else True
+    pool_pre_ping=False if is_test else True,
+    pool_recycle=300 if not is_test else -1
 )
 
 AsyncSessionLocal = async_sessionmaker(

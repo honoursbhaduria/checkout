@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 from typing import Generic, TypeVar, Optional, List, Dict, Any, Literal
 from uuid import UUID
-from pydantic import BaseModel, EmailStr, Field
+from pydantic import BaseModel, EmailStr, Field, model_validator
 
 T = TypeVar("T")
 
@@ -201,9 +201,19 @@ class AnswerTiming(BaseModel):
 
 class AnswerSubmitRequest(BaseModel):
     question_id: UUID
-    transcript: str = Field(..., min_length=1)
+    transcript: Optional[str] = None
+    answer_text: Optional[str] = None
     timing: Optional[AnswerTiming] = Field(default_factory=AnswerTiming)
     voice_metrics: Optional[VoiceMetrics] = Field(default_factory=VoiceMetrics)
+
+    @model_validator(mode="after")
+    def validate_and_sync_transcript(self):
+        if not self.transcript and self.answer_text:
+            self.transcript = self.answer_text
+        if not self.transcript or not self.transcript.strip():
+            raise ValueError("Field 'transcript' or 'answer_text' is required and must not be empty.")
+        self.transcript = self.transcript.strip()
+        return self
 
 
 class AnswerEvaluationResponse(BaseModel):

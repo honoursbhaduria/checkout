@@ -115,6 +115,27 @@ class FasterWhisperProvider(STTProvider):
                     except Exception:
                         pass
 
+    async def _groq_transcribe(self, audio_bytes: bytes) -> Optional[str]:
+        groq_key = os.environ.get("GROQ_API_KEY") or getattr(settings, "GROQ_API_KEY", None)
+        if not groq_key:
+            return None
+        try:
+            import httpx
+            ext = "wav" if audio_bytes.startswith(b"RIFF") else ("ogg" if audio_bytes.startswith(b"OggS") else "mp3")
+            files = {"file": (f"audio.{ext}", audio_bytes, f"audio/{ext}")}
+            data = {"model": "whisper-large-v3-turbo", "language": "en"}
+            headers = {"Authorization": f"Bearer {groq_key}"}
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.post("https://api.groq.com/openai/v1/audio/transcriptions", files=files, data=data, headers=headers)
+                if resp.status_code == 200:
+                    text = resp.json().get("text", "").strip()
+                    if text:
+                        logger.info(f"Groq Whisper transcribed {len(audio_bytes)} bytes in cloud: '{text}'")
+                        return text
+        except Exception as e:
+            logger.debug(f"Groq Whisper fallback bypass: {e}")
+        return None
+
     async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
         if not audio_bytes or len(audio_bytes) < 300:
             return ""
@@ -125,7 +146,15 @@ class FasterWhisperProvider(STTProvider):
             self._cache.move_to_end(cache_key)
             return self._cache[cache_key]
 
-        # 1. Execute optimized FasterWhisper in worker thread (non-blocking for FastAPI event loop)
+        # 1. Cloud-accelerated Groq Whisper (~150ms) if GROQ_API_KEY is configured
+        groq_text = await self._groq_transcribe(audio_bytes)
+        if groq_text:
+            if len(self._cache) >= self._max_cache_size:
+                self._cache.popitem(last=False)
+            self._cache[cache_key] = groq_text
+            return groq_text
+
+        # 2. Execute optimized FasterWhisper in worker thread (non-blocking for FastAPI event loop)
         transcript = await asyncio.to_thread(self._sync_transcribe, audio_bytes, fast)
 
         if transcript:

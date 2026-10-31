@@ -11,6 +11,18 @@ from app.infrastructure.models.models import User
 router = APIRouter(prefix="/resumes", tags=["Resumes"])
 
 
+@router.get("", response_model=APIResponse[list[ResumeResponse]])
+async def list_resumes(
+    limit: int = 20,
+    offset: int = 0,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = ResumeService(db)
+    resumes = await service.list_resumes(user.id, limit=limit, offset=offset)
+    return APIResponse(data=resumes)
+
+
 @router.post("", response_model=APIResponse[ResumeResponse], status_code=status.HTTP_201_CREATED)
 async def create_resume(
     data: ResumeCreate,

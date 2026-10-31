@@ -79,6 +79,19 @@ class JobService:
 
         return self._to_response(job, analysis)
 
+    async def list_jobs(self, user_id: UUID, limit: int = 20, offset: int = 0) -> list[JobResponse]:
+        stmt = (
+            select(Job)
+            .options(selectinload(Job.analysis))
+            .where(Job.user_id == user_id)
+            .order_by(Job.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        res = await self.db.execute(stmt)
+        jobs = res.scalars().all()
+        return [self._to_response(j) for j in jobs]
+
     async def get_job(self, user_id: UUID, job_id: UUID) -> JobResponse:
         stmt = select(Job).options(selectinload(Job.analysis)).where(
             Job.id == job_id,

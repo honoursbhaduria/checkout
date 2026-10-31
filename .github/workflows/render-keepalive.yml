@@ -1,0 +1,16 @@
+name: Render Free Tier Keep-Alive
+
+on:
+  schedule:
+    # Run every 10 minutes to prevent Render 15-minute sleep
+    - cron: '*/10 * * * *'
+  workflow_dispatch:
+
+jobs:
+  keepalive:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Render Backend Health Live
+        run: |
+          echo "Pinging https://checkout-noct.onrender.com/api/v1/health/live..."
+          curl -f -s -m 20 https://checkout-noct.onrender.com/api/v1/health/live || echo "Render ping heartbeat dispatched"

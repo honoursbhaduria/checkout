@@ -10,6 +10,18 @@ from app.infrastructure.models.models import User
 router = APIRouter(prefix="/jobs", tags=["Jobs"])
 
 
+@router.get("", response_model=APIResponse[list[JobResponse]])
+async def list_jobs(
+    limit: int = 20,
+    offset: int = 0,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    service = JobService(db)
+    jobs = await service.list_jobs(user.id, limit=limit, offset=offset)
+    return APIResponse(data=jobs)
+
+
 @router.post("", response_model=APIResponse[JobResponse], status_code=status.HTTP_201_CREATED)
 async def create_job(
     data: JobCreate,

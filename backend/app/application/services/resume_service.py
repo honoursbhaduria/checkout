@@ -166,6 +166,19 @@ class ResumeService:
         )
         return await self.create_resume(user_id, data, file_url=file_url)
 
+    async def list_resumes(self, user_id: UUID, limit: int = 20, offset: int = 0) -> List[ResumeResponse]:
+        stmt = (
+            select(Resume)
+            .options(selectinload(Resume.claims))
+            .where(Resume.user_id == user_id)
+            .order_by(Resume.created_at.desc())
+            .limit(limit)
+            .offset(offset)
+        )
+        res = await self.db.execute(stmt)
+        resumes = res.scalars().all()
+        return [self._to_response(r) for r in resumes]
+
     async def get_resume(self, user_id: UUID, resume_id: UUID) -> ResumeResponse:
         stmt = select(Resume).options(selectinload(Resume.claims)).where(
             Resume.id == resume_id,
