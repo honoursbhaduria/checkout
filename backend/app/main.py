@@ -29,9 +29,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Database initialization warning: {e}")
 
-    # Warm up the STT model in the background so the first mic transcription
-    # doesn't pay the download + load cost mid-interview.
-    async def _warmup_stt():
+    # Warm up STT and TTS in the background so the first mic transcription
+    # and question synthesis don't pay the cold download + load cost mid-interview.
+    async def _warmup_voice():
         try:
             import asyncio as _asyncio
             from app.ai.router import ai_router as _ai_router
@@ -43,9 +43,22 @@ async def lifespan(app: FastAPI):
         except Exception as e:
             logger.warning(f"STT warmup skipped: {e}")
 
+        try:
+            from app.api.v1.voice import generate_speech
+            common_prompts = [
+                "Welcome! To start off, I reviewed your background. Could you walk me through what motivated you to apply for this role and how your recent technical experience aligns with what we are building?",
+                "Great! Let's dive into your technical background.",
+                "Thank you for sharing. Let's move to the next question."
+            ]
+            for p in common_prompts:
+                await generate_speech(p)
+            logger.info("TTS common interview prompts preloaded and cached.")
+        except Exception as e:
+            logger.warning(f"TTS warmup skipped: {e}")
+
     try:
         import asyncio
-        asyncio.create_task(_warmup_stt())
+        asyncio.create_task(_warmup_voice())
     except Exception:
         pass
     yield

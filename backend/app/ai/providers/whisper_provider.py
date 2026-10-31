@@ -24,8 +24,8 @@ class FasterWhisperProvider(STTProvider):
         self.compute_type = compute_type
         is_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID"))
         if is_render:
-            # Render Free Tier: 512 MB RAM, 0.1 shared vCPU — keep footprint ultra-lean
-            self.cpu_threads = 2
+            # Render Free Tier: 512 MB RAM, 0.1 shared vCPU — single thread avoids CPU throttling
+            self.cpu_threads = 1
             self.num_workers = 1
             self._max_cache_size = 100
         else:
@@ -78,8 +78,42 @@ class FasterWhisperProvider(STTProvider):
             parts = [s.text.strip() for s in segments if s.text.strip()]
             return " ".join(parts).strip()
         except Exception as e:
-            logger.warning(f"FasterWhisper in-memory decode warning: {e}")
-            return ""
+            logger.debug(f"FasterWhisper in-memory decode warning: {e}, attempting temporary buffer fallback")
+            tmp_path = None
+            try:
+                ext = ".webm"
+                if audio_bytes.startswith(b"RIFF"):
+                    ext = ".wav"
+                elif audio_bytes.startswith(b"OggS"):
+                    ext = ".ogg"
+                elif audio_bytes.startswith(b"ID3") or (len(audio_bytes) > 2 and audio_bytes[:2] == b"\xff\xfb"):
+                    ext = ".mp3"
+                with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+                    tmp.write(audio_bytes)
+                    tmp_path = tmp.name
+
+                segments, _ = model.transcribe(
+                    tmp_path,
+                    beam_size=1,
+                    best_of=1,
+                    temperature=0.0,
+                    language="en",
+                    condition_on_previous_text=False,
+                    without_timestamps=True,
+                    suppress_blank=True,
+                    vad_filter=True,
+                )
+                parts = [s.text.strip() for s in segments if s.text.strip()]
+                return " ".join(parts).strip()
+            except Exception as e2:
+                logger.warning(f"FasterWhisper temp buffer fallback failed: {e2}")
+                return ""
+            finally:
+                if tmp_path and os.path.exists(tmp_path):
+                    try:
+                        os.unlink(tmp_path)
+                    except Exception:
+                        pass
 
     async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
         if not audio_bytes or len(audio_bytes) < 300:
