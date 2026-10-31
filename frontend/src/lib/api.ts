@@ -418,6 +418,19 @@ class ApiClient {
       body: JSON.stringify({ text: clean.slice(0, 800) }),
     });
   }
+
+  async preCacheTTS(texts: string[]): Promise<void> {
+    const valid = texts.filter(t => t && t.trim());
+    if (!valid.length) return;
+    try {
+      await this.request("/voice/pre-cache", {
+        method: "POST",
+        body: JSON.stringify({ texts: valid }),
+      });
+    } catch {
+      // Background optimization - non-fatal
+    }
+  }
 }
 
 export const api = new ApiClient();

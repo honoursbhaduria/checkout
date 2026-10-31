@@ -12,12 +12,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     && rm -rf /var/lib/apt/lists/*
 
-COPY pyproject.toml ./
+COPY requirements.txt ./
 RUN pip install --upgrade pip && \
-    pip install fastapi uvicorn sqlalchemy asyncpg redis celery opentelemetry-api prometheus-client boto3 qdrant-client argon2-cffi pyjwt pydantic-settings httpx
+    pip install -r requirements.txt
 
 COPY app/ ./app/
 
 EXPOSE 8000
 
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"]

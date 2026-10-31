@@ -11,7 +11,14 @@ redis_pool: Optional[aioredis.Redis] = None
 import os
 
 def _get_redis_kwargs(max_connections: Optional[int] = None):
-    kwargs = {"decode_responses": True}
+    kwargs = {
+        "decode_responses": True,
+        "socket_timeout": 5.0,
+        "socket_connect_timeout": 5.0,
+        "socket_keepalive": True,
+        "health_check_interval": 15,
+        "retry_on_timeout": True,
+    }
     if max_connections:
         kwargs["max_connections"] = max_connections
     if settings.REDIS_URL.startswith("rediss://") or "upstash.io" in settings.REDIS_URL:

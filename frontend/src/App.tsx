@@ -116,8 +116,10 @@ const cleanDisplayText = (text: string | undefined | null, maxChars = 280): stri
   let cleaned = String(text).replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, " ");
   cleaned = cleaned.replace(/%PDF[^\s]*/gi, " ").replace(/\s+/g, " ").trim();
   if (cleaned.length > maxChars) {
-    const cut = cleaned.slice(0, maxChars).rsplit(" ", 1)[0] || cleaned.slice(0, maxChars);
-    cleaned = `${cut.rstrip()}…`;
+    const sliced = cleaned.slice(0, maxChars);
+    const lastSpace = sliced.lastIndexOf(" ");
+    const cut = lastSpace > 0 ? sliced.slice(0, lastSpace) : sliced;
+    cleaned = `${cut.trimEnd()}…`;
   }
   return cleaned;
 };
@@ -187,6 +189,7 @@ export function App() {
   const [isSpeakingQuestion, setIsSpeakingQuestion] = useState<boolean>(false);
   const [isListeningMic, setIsListeningMic] = useState<boolean>(false);
   const [ttsEnabled, setTtsEnabled] = useState<boolean>(true);
+  const [voiceEngine, setVoiceEngine] = useState<"turbo" | "studio">("turbo");
 
   // Speech Recognition & Mic Stream refs
   const recognitionRef = useRef<any>(null);
@@ -197,6 +200,8 @@ export function App() {
   const liveSentCountRef = useRef<number>(0);
   const isTranscribingSliceRef = useRef<boolean>(false);
   const [isTranscribing, setIsTranscribing] = useState<boolean>(false);
+  const ttsBlobCacheRef = useRef<Map<string, string>>(new Map());
+  const candidateAnswerRef = useRef<string>(saved?.candidateAnswer || "");
 
   // Smooth live-transcription display: mic results stream into `candidateAnswer`
   // (target) while `displayedAnswer` eases toward it typewriter-style so text
@@ -508,31 +513,71 @@ export function App() {
     setIsSpeakingQuestion(true);
     setError(null);
 
-    // 1. Prefer server neural voice (works with zero OS voices on Linux)
-    try {
-      const res = await api.synthesizeSpeech(clean);
-      if (res && res.audio_base64) {
-        const mime = res.mime_type || "audio/wav";
-        const bytes = Uint8Array.from(atob(res.audio_base64), (c) => c.charCodeAt(0));
-        const blob = new Blob([bytes], { type: mime });
-        const url = URL.createObjectURL(blob);
-        const audio = new Audio(url);
+    // 1. Instant Turbo Mode: 0ms local browser speech synthesis
+    if (voiceEngine === "turbo") {
+      await speakWithBrowser(clean);
+      return;
+    }
+
+    // 2. Studio Mode: Instant from local client blob cache (0ms latency)
+    const cachedUrl = ttsBlobCacheRef.current.get(clean);
+    if (cachedUrl) {
+      try {
+        const audio = new Audio(cachedUrl);
         serverAudioRef.current = audio;
         audio.onended = () => {
-          URL.revokeObjectURL(url);
           serverAudioRef.current = null;
           setIsSpeakingQuestion(false);
         };
         audio.onerror = () => {
-          URL.revokeObjectURL(url);
           serverAudioRef.current = null;
           speakWithBrowser(clean);
         };
         await audio.play();
         return;
+      } catch (e) {
+        console.warn("Cached audio playback error:", e);
+      }
+    }
+
+    // 3. Studio Mode: High-speed neural voice with instant 600ms fallback
+    let fallbackTimer: any = null;
+    let didFallback = false;
+
+    fallbackTimer = setTimeout(() => {
+      didFallback = true;
+      speakWithBrowser(clean);
+    }, 600);
+
+    try {
+      const res = await api.synthesizeSpeech(clean);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (res && res.audio_base64) {
+        const mime = res.mime_type || "audio/mpeg";
+        const bytes = Uint8Array.from(atob(res.audio_base64), (c) => c.charCodeAt(0));
+        const blob = new Blob([bytes], { type: mime });
+        const url = URL.createObjectURL(blob);
+        ttsBlobCacheRef.current.set(clean, url);
+        if (!didFallback) {
+          const audio = new Audio(url);
+          serverAudioRef.current = audio;
+          audio.onended = () => {
+            serverAudioRef.current = null;
+            setIsSpeakingQuestion(false);
+          };
+          audio.onerror = () => {
+            serverAudioRef.current = null;
+            speakWithBrowser(clean);
+          };
+          await audio.play();
+          return;
+        }
       }
     } catch (e) {
-      console.warn("Server TTS unavailable, using browser voice:", e);
+      if (fallbackTimer) clearTimeout(fallbackTimer);
+      if (!didFallback) {
+        await speakWithBrowser(clean);
+      }
     }
 
     // 2. Browser fallback
@@ -546,6 +591,7 @@ export function App() {
 
   // Typewriter easing: displayed text glides toward the mic target smoothly
   useEffect(() => {
+    candidateAnswerRef.current = candidateAnswer;
     if (userTypingRef.current) {
       userTypingRef.current = false;
       setDisplayedAnswer(candidateAnswer);
@@ -733,40 +779,45 @@ export function App() {
       try { recognitionRef.current.stop(); } catch {}
     }
 
+    // Immediately release hardware mic tracks so OS indicator turns off instantly
+    if (micStreamRef.current) {
+      micStreamRef.current.getTracks().forEach((track) => track.stop());
+      micStreamRef.current = null;
+    }
+
     const mr = mediaRecorderRef.current;
     if (mr && mr.state !== "inactive") {
       mr.onstop = async () => {
         const audioBlob = new Blob(audioChunksRef.current, { type: mr.mimeType || "audio/webm" });
+        const existing = candidateAnswerRef.current?.trim() || "";
+
+        // If candidate answer was already captured live, don't freeze with spinner
+        if (existing.length >= 10) {
+          api.transcribeAudioFile(audioBlob, true).then((whisperText) => {
+            const cleanW = (whisperText || "").trim();
+            if (cleanW && cleanW.length > existing.length * 0.8) {
+              snapAnswerDisplay(cleanW);
+            }
+          }).catch(() => {});
+          return;
+        }
+
+        // Otherwise run fast multi-threaded Whisper
         if (audioBlob.size > 500) {
           try {
             setIsTranscribing(true);
             const transcript = await api.transcribeAudioFile(audioBlob);
             if (transcript && transcript.trim()) {
-              // Final result snaps in whole — what you see is what gets submitted
               snapAnswerDisplay(transcript.trim());
             }
           } catch (e: any) {
             console.warn("Backend STT error:", e);
           } finally {
             setIsTranscribing(false);
-            if (micStreamRef.current) {
-              micStreamRef.current.getTracks().forEach((track) => track.stop());
-              micStreamRef.current = null;
-            }
-          }
-        } else {
-          if (micStreamRef.current) {
-            micStreamRef.current.getTracks().forEach((track) => track.stop());
-            micStreamRef.current = null;
           }
         }
       };
       try { mr.stop(); } catch {}
-    } else {
-      if (micStreamRef.current) {
-        micStreamRef.current.getTracks().forEach((track) => track.stop());
-        micStreamRef.current = null;
-      }
     }
 
     setIsListeningMic(false);
@@ -884,11 +935,21 @@ export function App() {
       // Check next question or completion
       const updatedQ = await api.getCurrentQuestion(interviewId).catch(() => null);
       if (updatedQ && updatedQ.question_id !== currentQuestion.question_id) {
+        // Pre-fetch and cache next question audio immediately while candidate reads evaluation
+        api.synthesizeSpeech(updatedQ.question.text).then((res) => {
+          if (res?.audio_base64) {
+            const mime = res.mime_type || "audio/mpeg";
+            const bytes = Uint8Array.from(atob(res.audio_base64), (c) => c.charCodeAt(0));
+            const blob = new Blob([bytes], { type: mime });
+            ttsBlobCacheRef.current.set(updatedQ.question.text.trim(), URL.createObjectURL(blob));
+          }
+        }).catch(() => {});
+
         // Prepare next question
         setTimeout(() => {
           setCurrentQuestion(updatedQ);
           setCandidateAnswer("");
-      setDisplayedAnswer("");
+          setDisplayedAnswer("");
           speakText(updatedQ.question.text);
         }, 1800);
       } else {
@@ -1644,6 +1705,17 @@ export function App() {
                       title={isSpeakingQuestion ? "Stop AI voice playback" : "Play question audio with AI voice"}
                     >
                       <Volume2 className={`w-4 h-4 ${isSpeakingQuestion ? "animate-pulse text-marker" : "text-marker group-hover:text-white"}`} /> {isSpeakingQuestion ? "Stop Voice" : "Listen to AI Voice"}
+                    </button>
+                    <button
+                      onClick={() => setVoiceEngine((prev) => (prev === "turbo" ? "studio" : "turbo"))}
+                      className={`text-xs sm:text-base font-body px-2.5 sm:px-3 py-1 rounded-wobbly border-2 border-pencil shadow-sketchSm flex items-center gap-1.5 transition-all cursor-pointer select-none ${
+                        voiceEngine === "turbo"
+                          ? "bg-amber-100 text-pencil hover:bg-amber-200"
+                          : "bg-purple-100 text-pencil hover:bg-purple-200"
+                      }`}
+                      title="Toggle between Instant Browser Turbo Voice (0ms) and Studio Neural HD"
+                    >
+                      {voiceEngine === "turbo" ? "⚡ Turbo (0ms)" : "🎙️ Studio HD"}
                     </button>
                   </div>
                 </SpeechBubble>

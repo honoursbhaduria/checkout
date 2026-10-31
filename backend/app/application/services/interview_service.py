@@ -105,6 +105,13 @@ class InterviewService:
                 question_text=q_data["text"]
             )
             self.db.add(question)
+
+            try:
+                import asyncio
+                from app.api.v1.voice import generate_speech
+                asyncio.create_task(generate_speech(q_data["text"]))
+            except Exception:
+                pass
             
             interview.status = "SCREENING"
             state.question_index = 1
@@ -306,6 +313,13 @@ class InterviewService:
             self.db.add(next_question)
             state.question_index = next_seq
 
+            try:
+                import asyncio
+                from app.api.v1.voice import generate_speech
+                asyncio.create_task(generate_speech(next_q_data["text"]))
+            except Exception:
+                pass
+
         await self.db.commit()
         await self.db.refresh(evaluation)
 
@@ -426,7 +440,7 @@ class InterviewService:
             is_good: Optional[bool] = None
             if score is not None:
                 scores.append(score)
-                if answered_count > 0 and score >= 70.0 and readiness in ["STRONG_CANDIDATE", "INTERVIEW_READY"]:
+                if score >= 70.0:
                     is_good = True
                     good_count += 1
                 else:

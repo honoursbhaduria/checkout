@@ -1,14 +1,34 @@
+import os
 import json
+import base64
+import hashlib
 import logging
+from collections import OrderedDict
+from typing import List, Optional
 from uuid import UUID
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Depends, status
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect, UploadFile, File, BackgroundTasks
 from pydantic import BaseModel
+
 from app.ai.router import ai_router
+from app.core.config import settings
+from app.core.redis import get_redis_client
 from app.domain.schemas import APIResponse
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/voice", tags=["Voice Engine"])
+
+# High-speed LRU memory cache for synthesized TTS (capacity tuned for Render 512MB RAM)
+_is_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID"))
+_MAX_MEMORY_TTS_CACHE = 100 if _is_render else 300
+_MEMORY_TTS_CACHE: OrderedDict[str, dict] = OrderedDict()
+
+
+def _put_memory_cache(key: str, data: dict):
+    if len(_MEMORY_TTS_CACHE) >= _MAX_MEMORY_TTS_CACHE:
+        _MEMORY_TTS_CACHE.popitem(last=False)
+    _MEMORY_TTS_CACHE[key] = data
 
 
 class TranscribeRequest(BaseModel):
@@ -19,8 +39,140 @@ class SynthesizeRequest(BaseModel):
     text: str
 
 
-import base64
-from fastapi import UploadFile, File
+class PreCacheRequest(BaseModel):
+    texts: List[str]
+
+
+async def generate_speech(text: str) -> dict:
+    """Multi-tiered ultra-fast speech synthesis:
+    1. In-memory LRU cache (< 0.1ms)
+    2. Redis distributed cache (< 2ms)
+    3. High-fidelity Neural Edge-TTS (~1s, cached thereafter)
+    4. Gemini 2.5 Flash TTS fallback
+    5. Client SpeechSynthesis fallback
+    """
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return {"status": "ready", "mode": "client_speech_synthesis"}
+
+    if len(cleaned) > 800:
+        cleaned = cleaned[:800]
+
+    cache_key = hashlib.sha256(cleaned.encode("utf-8")).hexdigest()
+
+    # Tier 1: In-memory cache
+    if cache_key in _MEMORY_TTS_CACHE:
+        _MEMORY_TTS_CACHE.move_to_end(cache_key)
+        return _MEMORY_TTS_CACHE[cache_key]
+
+    # Tier 2: Redis distributed cache
+    try:
+        redis = await get_redis_client()
+        cached_json = await redis.get(f"tts:{cache_key}")
+        if cached_json:
+            result = json.loads(cached_json)
+            _put_memory_cache(cache_key, result)
+            return result
+    except Exception as e:
+        logger.debug(f"Redis TTS cache read bypass: {e}")
+
+    # Tier 3: Ultra-speed Edge Neural TTS (GuyNeural with +15% interview cadence)
+    try:
+        import edge_tts
+        communicate = edge_tts.Communicate(cleaned, "en-US-GuyNeural", rate="+15%")
+        audio_bytes = b""
+        async for chunk in communicate.stream():
+            if chunk["type"] == "audio":
+                audio_bytes += chunk["data"]
+
+        if audio_bytes:
+            b64 = base64.b64encode(audio_bytes).decode("utf-8")
+            result = {
+                "status": "ready",
+                "mode": "server_tts",
+                "audio_base64": b64,
+                "mime_type": "audio/mpeg",
+            }
+            _put_memory_cache(cache_key, result)
+            try:
+                redis = await get_redis_client()
+                await redis.set(f"tts:{cache_key}", json.dumps(result), ex=86400 * 7)
+            except Exception:
+                pass
+            return result
+    except Exception as e:
+        logger.debug(f"Edge TTS fallback: {e}")
+
+    # Tier 4: Gemini TTS Fallback
+    api_key = getattr(settings, "GEMINI_API_KEY", None)
+    if api_key:
+        try:
+            import httpx
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
+            payload = {
+                "contents": [{"parts": [{"text": f"Say naturally, at a steady interview pace: {cleaned}"}]}],
+                "generationConfig": {
+                    "responseModalities": ["AUDIO"],
+                    "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "Kore"}}},
+                },
+            }
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    body = resp.json()
+                    pcm_chunks: list[bytes] = []
+                    rate = 24000
+                    for cand in body.get("candidates", []):
+                        for part in cand.get("content", {}).get("parts", []):
+                            inline = part.get("inlineData") or {}
+                            b64 = inline.get("data")
+                            if not b64:
+                                continue
+                            raw = base64.b64decode(b64)
+                            if raw[:4] == b"RIFF":
+                                result = {
+                                    "status": "ready",
+                                    "mode": "server_tts",
+                                    "audio_base64": b64,
+                                    "mime_type": inline.get("mimeType", "audio/wav"),
+                                }
+                                _put_memory_cache(cache_key, result)
+                                return result
+                            m = (inline.get("mimeType") or "").lower()
+                            if "16000" in m:
+                                rate = 16000
+                            pcm_chunks.append(raw)
+                    if pcm_chunks:
+                        import struct as _struct
+                        pcm = b"".join(pcm_chunks)
+                        n = len(pcm)
+                        header = _struct.pack(
+                            "<4sI4s4sIHHIIHH4sI",
+                            b"RIFF", 36 + n, b"WAVE",
+                            b"fmt ", 16, 1, 1, rate,
+                            rate * 2, 2, 16,
+                            b"data", n,
+                        )
+                        b64 = base64.b64encode(header + pcm).decode("utf-8")
+                        result = {
+                            "status": "ready",
+                            "mode": "server_tts",
+                            "audio_base64": b64,
+                            "mime_type": "audio/wav",
+                        }
+                        _put_memory_cache(cache_key, result)
+                        try:
+                            redis = await get_redis_client()
+                            await redis.set(f"tts:{cache_key}", json.dumps(result), ex=86400 * 7)
+                        except Exception:
+                            pass
+                        return result
+        except Exception as e:
+            logger.debug(f"Gemini TTS fallback: {e}")
+
+    # Tier 5: Browser native speech synthesis fallback
+    return {"status": "ready", "text": cleaned, "mode": "client_speech_synthesis"}
+
 
 @router.post("/transcribe")
 async def transcribe_audio_rest(data: TranscribeRequest):
@@ -49,81 +201,24 @@ async def transcribe_audio_file(file: UploadFile = File(...), fast: bool = False
 
 @router.post("/synthesize")
 async def synthesize_text_rest(data: SynthesizeRequest):
-    """Server-side neural TTS via Gemini (works even when OS has no local voices).
-    Falls back to client speechSynthesis mode when unavailable."""
-    import httpx
-    from app.core.config import settings
+    """Server-side neural TTS with multi-tier caching (RAM + Redis) and fallback."""
+    result = await generate_speech(data.text)
+    return APIResponse(data=result)
 
-    text = (data.text or "").strip()
-    if not text:
-        return APIResponse(data={"status": "ready", "mode": "client_speech_synthesis"})
-    # Cap length to keep TTS fast
-    if len(text) > 800:
-        text = text[:800]
 
-    api_key = getattr(settings, "GEMINI_API_KEY", None)
-    if api_key:
-        try:
-            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-tts:generateContent?key={api_key}"
-            payload = {
-                "contents": [{"parts": [{"text": f"Say naturally, at a steady interview pace: {text}"}]}],
-                "generationConfig": {
-                    "responseModalities": ["AUDIO"],
-                    "speechConfig": {"voiceConfig": {"prebuiltVoiceConfig": {"voiceName": "Kore"}}},
-                },
-            }
-            async with httpx.AsyncClient(timeout=25.0) as client:
-                resp = await client.post(url, json=payload)
-                if resp.status_code == 200:
-                    body = resp.json()
-                    # Collect EVERY audio part — long texts come back split across
-                    # multiple parts; playing only the first one cuts speech off mid-way.
-                    pcm_chunks: list[bytes] = []
-                    rate = 24000
-                    for cand in body.get("candidates", []):
-                        for part in cand.get("content", {}).get("parts", []):
-                            inline = part.get("inlineData") or {}
-                            b64 = inline.get("data")
-                            if not b64:
-                                continue
-                            import base64 as _b64
-                            raw = _b64.b64decode(b64)
-                            if raw[:4] == b"RIFF":
-                                # Already containerized — use as-is
-                                return APIResponse(data={
-                                    "status": "ready",
-                                    "mode": "server_tts",
-                                    "audio_base64": b64,
-                                    "mime_type": inline.get("mimeType", "audio/wav"),
-                                })
-                            m = (inline.get("mimeType") or "").lower()
-                            if "rate=16000" in m or "16000" in m:
-                                rate = 16000
-                            pcm_chunks.append(raw)
-                    if pcm_chunks:
-                        import base64 as _b64
-                        import struct as _struct
-                        pcm = b"".join(pcm_chunks)
-                        n = len(pcm)
-                        header = _struct.pack(
-                            "<4sI4s4sIHHIIHH4sI",
-                            b"RIFF", 36 + n, b"WAVE",
-                            b"fmt ", 16, 1, 1, rate,
-                            rate * 2, 2, 16,
-                            b"data", n,
-                        )
-                        return APIResponse(data={
-                            "status": "ready",
-                            "mode": "server_tts",
-                            "audio_base64": _b64.b64encode(header + pcm).decode("utf-8"),
-                            "mime_type": "audio/wav",
-                        })
-                else:
-                    logger.warning(f"Gemini TTS HTTP {resp.status_code}: {resp.text[:200]}")
-        except Exception as e:
-            logger.warning(f"Gemini TTS fallback warning: {e}")
+@router.post("/pre-cache")
+async def pre_cache_tts(data: PreCacheRequest, background_tasks: BackgroundTasks):
+    """Pre-warm TTS cache for all questions in an upcoming interview session."""
+    async def _warmup():
+        for t in data.texts:
+            if t and t.strip():
+                try:
+                    await generate_speech(t.strip())
+                except Exception as e:
+                    logger.debug(f"Pre-cache item skipped: {e}")
 
-    return APIResponse(data={"status": "ready", "text": text, "mode": "client_speech_synthesis"})
+    background_tasks.add_task(_warmup)
+    return APIResponse(data={"status": "warmup_started", "count": len(data.texts)})
 
 
 @router.websocket("/sessions/{session_id}/stream")
@@ -136,7 +231,6 @@ async def voice_stream_websocket(websocket: WebSocket, session_id: str):
     logger.info(f"Voice WebSocket connected for session {session_id}")
 
     try:
-        # Send session confirmation
         await websocket.send_json({
             "type": "session.ready",
             "session_id": session_id,
@@ -145,7 +239,6 @@ async def voice_stream_websocket(websocket: WebSocket, session_id: str):
         })
 
         while True:
-            # Receive message (JSON control or binary audio)
             message = await websocket.receive()
             if "text" in message:
                 payload = json.loads(message["text"])
@@ -154,20 +247,16 @@ async def voice_stream_websocket(websocket: WebSocket, session_id: str):
                 if msg_type == "ping":
                     await websocket.send_json({"type": "pong"})
                 elif msg_type == "user.barge_in":
-                    # Handle barge-in: immediately acknowledge and halt TTS audio streaming
                     await websocket.send_json({
                         "type": "server.interrupted",
                         "timestamp": payload.get("timestamp_ms")
                     })
                 elif msg_type == "audio.finished":
-                    # Emit simulated transcription confirmation
                     await websocket.send_json({
                         "type": "transcript.final",
                         "text": payload.get("transcript", "Transcript received successfully.")
                     })
             elif "bytes" in message:
-                # Handle binary audio frame
-                # In full Whisper stream, feed to audio ring buffer
                 pass
 
     except WebSocketDisconnect:
