@@ -642,7 +642,15 @@ export function App() {
       if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         throw new Error("getUserMedia is not supported on this browser");
       }
-      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          sampleRate: 16000,
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true,
+        },
+      });
       micStreamRef.current = stream;
       setIsListeningMic(true);
       setError(null);
@@ -656,7 +664,9 @@ export function App() {
           : MediaRecorder.isTypeSupported("audio/ogg")
           ? "audio/ogg"
           : "";
-        const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+        const mrOptions: MediaRecorderOptions = { audioBitsPerSecond: 16000 };
+        if (mime) mrOptions.mimeType = mime;
+        const mr = new MediaRecorder(stream, mrOptions);
         mr.ondataavailable = (e) => {
           if (e.data && e.data.size > 0) {
             audioChunksRef.current.push(e.data);

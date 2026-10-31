@@ -57,6 +57,10 @@ class FasterWhisperProvider(STTProvider):
 
     def _sync_transcribe(self, audio_bytes: bytes, fast: bool = False) -> str:
         """Synchronous CPU-bound transcription executed in thread pool."""
+        # On Render Free Tier or in fast mode, skip Silero VAD neural pass to save ~50MB RAM and 2-3s CPU latency
+        is_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID"))
+        use_vad = not fast and not is_render
+
         try:
             model = self._get_model()
             if not model:
@@ -72,8 +76,8 @@ class FasterWhisperProvider(STTProvider):
                 condition_on_previous_text=False,
                 without_timestamps=True,
                 suppress_blank=True,
-                vad_filter=True,
-                vad_parameters=dict(min_silence_duration_ms=250, speech_pad_ms=50)
+                vad_filter=use_vad,
+                vad_parameters=dict(min_silence_duration_ms=250, speech_pad_ms=50) if use_vad else None
             )
             parts = [s.text.strip() for s in segments if s.text.strip()]
             return " ".join(parts).strip()
@@ -101,7 +105,7 @@ class FasterWhisperProvider(STTProvider):
                     condition_on_previous_text=False,
                     without_timestamps=True,
                     suppress_blank=True,
-                    vad_filter=True,
+                    vad_filter=use_vad,
                 )
                 parts = [s.text.strip() for s in segments if s.text.strip()]
                 return " ".join(parts).strip()
