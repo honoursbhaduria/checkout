@@ -140,6 +140,36 @@ class FasterWhisperProvider(STTProvider):
             logger.debug(f"Groq Whisper fallback bypass: {e}")
         return None
 
+    async def _gemini_transcribe(self, audio_bytes: bytes) -> Optional[str]:
+        api_key = getattr(settings, "GEMINI_API_KEY", None)
+        if not api_key:
+            return None
+        try:
+            import base64
+            import httpx
+            ext = ".wav" if audio_bytes.startswith(b"RIFF") else (".ogg" if audio_bytes.startswith(b"OggS") else ".webm")
+            mime = "audio/wav" if ext == ".wav" else ("audio/ogg" if ext == ".ogg" else "audio/webm")
+            b64_data = base64.b64encode(audio_bytes).decode("utf-8")
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={api_key}"
+            payload = {
+                "contents": [{
+                    "parts": [
+                        {"inlineData": {"mimeType": mime, "data": b64_data}},
+                        {"text": "Transcribe the spoken English words accurately word for word. If silent, return empty. Return ONLY transcription text."}
+                    ]
+                }]
+            }
+            async with httpx.AsyncClient(timeout=4.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    cand = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
+                    if cand and cand.upper() != "SILENCE" and cand.lower() != "empty":
+                        logger.info(f"Gemini Flash Cloud STT transcribed audio: '{cand}'")
+                        return cand
+        except Exception as e:
+            logger.debug(f"Gemini Flash STT bypass: {e}")
+        return None
+
     async def transcribe_audio(self, audio_bytes: bytes, fast: bool = False) -> str:
         if not audio_bytes or len(audio_bytes) < 300:
             return ""
@@ -158,7 +188,18 @@ class FasterWhisperProvider(STTProvider):
             self._cache[cache_key] = groq_text
             return groq_text
 
-        # 2. Execute optimized FasterWhisper in worker thread (non-blocking for FastAPI event loop)
+        # 2. On low-CPU cloud containers (e.g. Render Free Tier 0.1 vCPU), prefer Gemini Cloud STT (<2s)
+        # over burning 36+ seconds of local CPU core compute
+        is_render = bool(os.environ.get("RENDER") or os.environ.get("RENDER_SERVICE_ID"))
+        if is_render and settings.GEMINI_API_KEY and not fast:
+            cloud_tx = await self._gemini_transcribe(audio_bytes)
+            if cloud_tx:
+                if len(self._cache) >= self._max_cache_size:
+                    self._cache.popitem(last=False)
+                self._cache[cache_key] = cloud_tx
+                return cloud_tx
+
+        # 3. Execute optimized FasterWhisper in worker thread (non-blocking for FastAPI event loop)
         transcript = await asyncio.to_thread(self._sync_transcribe, audio_bytes, fast)
 
         if transcript:
@@ -169,35 +210,12 @@ class FasterWhisperProvider(STTProvider):
             self._cache[cache_key] = transcript
             return transcript
 
-        # 2. Strict fast fallback: If faster-whisper returned empty on a final full recording
+        # 4. Strict fast fallback: If faster-whisper returned empty on a final full recording
         # and Gemini is available, call Gemini STT with a short 3s timeout
         if not transcript and not fast and settings.GEMINI_API_KEY:
-            try:
-                import base64
-                import httpx
-                ext = ".webm"
-                if audio_bytes.startswith(b"RIFF"):
-                    ext = ".wav"
-                mime = "audio/webm" if ext == ".webm" else "audio/wav"
-                b64_data = base64.b64encode(audio_bytes).decode("utf-8")
-                url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={settings.GEMINI_API_KEY}"
-                payload = {
-                    "contents": [{
-                        "parts": [
-                            {"inlineData": {"mimeType": mime, "data": b64_data}},
-                            {"text": "Transcribe the spoken English words accurately word for word. If silent, return empty. Return ONLY transcription text."}
-                        ]
-                    }]
-                }
-                async with httpx.AsyncClient(timeout=3.0) as client:
-                    resp = await client.post(url, json=payload)
-                    if resp.status_code == 200:
-                        cand = resp.json()["candidates"][0]["content"]["parts"][0]["text"].strip()
-                        if cand and cand.upper() != "SILENCE" and cand.lower() != "empty":
-                            transcript = cand
-                            logger.info(f"Gemini Flash STT transcribed audio: '{transcript}'")
-            except Exception as e:
-                logger.debug(f"Gemini Flash audio fallback: {e}")
+            cloud_tx = await self._gemini_transcribe(audio_bytes)
+            if cloud_tx:
+                transcript = cloud_tx
 
         if transcript:
             if len(self._cache) >= self._max_cache_size:
